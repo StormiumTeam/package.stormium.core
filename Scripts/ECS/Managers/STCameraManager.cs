@@ -1,4 +1,4 @@
-﻿using Guerro.Utilities;
+﻿using package.guerro.shared;
 using Stormium.Internal.PlayerLoop;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -15,9 +15,9 @@ namespace Stormium.Internal.ECS
     {
         public struct Group
         {
-            public ComponentArray<Camera>       UCameras;
-            public ComponentDataArray<STCamera> DataCameras;
-            public EntityArray                  Entities;
+            public ComponentArray<Camera>         UCameras;
+            public ComponentDataArray<CameraData> DataCameras;
+            public EntityArray                    Entities;
 
             public int Length;
         }
@@ -67,9 +67,9 @@ namespace Stormium.Internal.ECS
         /// <param name="entity">The entity where the camera is attached to</param>
         /// <param name="information">The informations for the update</param>
         /// <returns>Return a boolean value, if false, it means it couldn't update</returns>
-        public bool SetCamera(Entity entity, STCamera information)
+        public bool SetCamera(Entity entity, CameraData information)
         {
-            var hasEntity = EntityManager.HasComponent<STCamera>(entity);
+            var hasEntity = EntityManager.HasComponent<CameraData>(entity);
             //GameLogs.ErrorIfFalse(hasEntity);
             if (!hasEntity)
             {
@@ -82,7 +82,7 @@ namespace Stormium.Internal.ECS
             return true;
         }
 
-        public void DirectSetCamera(Entity entity, STCamera information)
+        public void DirectSetCamera(Entity entity, CameraData information)
         {
             EntityManager.SetComponentData(entity, information);
 
@@ -101,14 +101,14 @@ namespace Stormium.Internal.ECS
         /// <param name="camera">The camera which should be attached to an entity</param>
         /// <param name="information">The information for the update</param>
         /// <returns>Return a boolean value, if false, it means it couldn't update</returns>
-        public bool SlowForceSetCamera(Camera camera, STCamera information)
+        public bool SlowForceSetCamera(Camera camera, CameraData information)
         {
             //GameLogs.LogPartialMethod(nameof(SlowForceSetCamera), nameof(STCameraManager));
             ForceSetCamera(camera, information);
             return true;
         }
 
-        public void ForceSetCamera(Camera camera, STCamera information)
+        public void ForceSetCamera(Camera camera, CameraData information)
         {
             
         }
