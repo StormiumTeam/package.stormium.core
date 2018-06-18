@@ -1,7 +1,7 @@
 using Unity.Entities;
 using UnityEngine.Experimental.PlayerLoop;
 
-namespace Stormium.Internal.PlayerLoop
+namespace package.stormium.core
 {
     public static class STUpdateOrder
     {

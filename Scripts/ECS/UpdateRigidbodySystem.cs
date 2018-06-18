@@ -1,9 +1,8 @@
 ﻿using System;
-using Stormium.Internal.PlayerLoop;
 using Unity.Entities;
 using UnityEngine;
 
-namespace Stormium.Internal.ECS
+namespace package.stormium.core
 {
     [UpdateAfter(typeof(STUpdateOrder.UORigidbodyUpdateBefore.End)),
      UpdateBefore(typeof(STUpdateOrder.UORigidbodyUpdateAfter))]
@@ -11,8 +10,8 @@ namespace Stormium.Internal.ECS
     public class UpdateRigidbodySystem : ComponentSystem
     {
         public static event Action OnBeforeSimulate;
-        public static event Action OnBeforeSimulateItem;
-        public static event Action OnAfterSimulateItem;
+        public static event Action<float> OnBeforeSimulateItem;
+        public static event Action<float> OnAfterSimulateItem;
         public static event Action OnAfterSimulate;
 
         private float m_Timer;
@@ -21,17 +20,19 @@ namespace Stormium.Internal.ECS
         {
             m_Timer += Time.deltaTime;
 
-            OnBeforeSimulate?.Invoke();;
+            OnBeforeSimulate?.Invoke();
+
+            var delta = Time.fixedDeltaTime;
             
-            while (m_Timer >= Time.fixedDeltaTime)
+            while (m_Timer >= delta)
             {
-                m_Timer -= Time.fixedDeltaTime;
+                m_Timer -= delta;
                 
-                OnBeforeSimulateItem?.Invoke();
+                OnBeforeSimulateItem?.Invoke(delta);
                 
-                Physics.Simulate(Time.fixedDeltaTime);
+                Physics.Simulate(delta);
                 
-                OnAfterSimulateItem?.Invoke();
+                OnAfterSimulateItem?.Invoke(delta);
             }
             
             Physics.SyncTransforms();

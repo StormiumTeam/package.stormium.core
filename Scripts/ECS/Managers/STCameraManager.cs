@@ -1,5 +1,4 @@
 ﻿using package.guerro.shared;
-using Stormium.Internal.PlayerLoop;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -8,7 +7,7 @@ using UnityEngine.Experimental.PlayerLoop;
 
 #pragma warning disable 649 reason:"inject"
 
-namespace Stormium.Internal.ECS
+namespace package.stormium.core
 {
     [UpdateAfter(typeof(STUpdateOrder.UORigidbodyUpdateAfter))]
     public class STCameraManager : ComponentSystem
