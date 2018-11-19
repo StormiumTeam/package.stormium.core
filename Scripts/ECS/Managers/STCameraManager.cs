@@ -1,4 +1,4 @@
-﻿using package.guerro.shared;
+﻿using package.stormiumteam.shared;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -18,14 +18,14 @@ namespace package.stormium.core
             public ComponentDataArray<CameraData> DataCameras;
             public EntityArray                    Entities;
 
-            public int Length;
+            public readonly int Length;
         }
 
         [Inject] private Group m_Group;
 
-        protected override void OnCreateManager(int capacity)
+        protected override void OnCreateManager()
         {
-            base.OnCreateManager(capacity);
+            base.OnCreateManager();
 
             //HDRenderPipeline.beginFrameRendering += OnFrameBeginRender;
         }

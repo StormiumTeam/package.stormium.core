@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Unity.Burst">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Burst.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Collections">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Collections.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Entities">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Entities.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Entities.Hybrid">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Entities.Hybrid.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Entities.Properties">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Entities.Properties.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Jobs">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Jobs.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Mathematics">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Mathematics.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ProBuilder.AssetIdRemapUtility">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.ProBuilder.AssetIdRemapUtility.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ProBuilder.Core">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.ProBuilder.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ProBuilder.MeshOperations">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.ProBuilder.MeshOperations.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.ProGrids">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.ProGrids.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Properties">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Properties.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Rendering.Hybrid">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Rendering.Hybrid.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Transforms">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Transforms.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Transforms.Hybrid">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Transforms.Hybrid.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.Transforms2D">
+      <HintPath>..\..\..\STORMIUM\StormiumUnityRepository\StormiumGameClient\Library\ScriptAssemblies\Unity.Transforms2D.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>..\..\..\..\..\..\..\Program Files\Unity\Hub\Editor\2018.2.0b8\Editor\Data\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
