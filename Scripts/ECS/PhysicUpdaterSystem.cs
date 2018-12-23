@@ -58,9 +58,8 @@ namespace package.stormium.core
         {
             m_Timer += Time.deltaTime;
 
-            foreach (var manager in AppEvent<IPhysicPreSimulate>.objList)
+            foreach (var manager in AppEvent<IPhysicPreSimulate>.GetObjEvents())
             {
-                AppEvent<IPhysicPreSimulate>.Caller = this;
                 manager.PreSimulate();
             }
             
@@ -128,26 +127,23 @@ namespace package.stormium.core
 
             for (int i = 0; i != LastIterationCount; i++)
             {
-                foreach (var manager in AppEvent<IPhysicPreSimulateItem>.objList)
+                foreach (var manager in AppEvent<IPhysicPreSimulateItem>.GetObjEvents())
                 {
-                    AppEvent<IPhysicPreSimulateItem>.Caller = this;
                     manager.PreSimulateItem(delta);
                 }
                 
                 Physics.Simulate(delta);
                 
-                foreach (var manager in AppEvent<IPhysicPostSimulateItem>.objList)
+                foreach (var manager in AppEvent<IPhysicPostSimulateItem>.GetObjEvents())
                 {
-                    AppEvent<IPhysicPostSimulateItem>.Caller = this;
                     manager.PostSimulateItem(delta);
                 }
             }
 
             Physics.SyncTransforms();
 
-            foreach (var manager in AppEvent<IPhysicPostSimulate>.objList)
+            foreach (var manager in AppEvent<IPhysicPostSimulate>.GetObjEvents())
             {
-                AppEvent<IPhysicPostSimulate>.Caller = this;
                 manager.PostSimulate();
             }
         }
