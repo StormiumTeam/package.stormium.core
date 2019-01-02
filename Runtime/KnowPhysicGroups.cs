@@ -1,7 +1,7 @@
 ﻿using package.stormiumteam.shared;
 using UnityEngine;
 
-namespace Scripts
+namespace Stormium.Core
 {
     public static class KnowPhysicGroups
     {

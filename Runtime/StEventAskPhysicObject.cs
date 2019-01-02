@@ -2,7 +2,7 @@ using package.stormiumteam.shared;
 using Unity.Collections;
 using Unity.Entities;
 
-namespace Scripts
+namespace Stormium.Core
 {
     public abstract class StEventAskPhysicObjects
     {

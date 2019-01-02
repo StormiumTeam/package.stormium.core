@@ -3,7 +3,7 @@ using package.stormiumteam.shared.modding;
 using Scripts;
 using Unity.Entities;
 
-namespace package.stormium.core
+namespace Stormium.Core
 {
     public class Bootstrap : CModBootstrap
     {

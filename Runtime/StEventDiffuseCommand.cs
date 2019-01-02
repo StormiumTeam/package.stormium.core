@@ -2,7 +2,7 @@
 using Unity.Entities;
 using UnityEngine.Assertions;
 
-namespace package.stormium.core
+namespace Stormium.Core
 {
     public abstract class StEventDiffuseCommand
     {

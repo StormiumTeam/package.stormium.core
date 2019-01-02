@@ -7,7 +7,7 @@ using UnityEngine.Experimental.PlayerLoop;
 
 #pragma warning disable 649 reason:"inject"
 
-namespace package.stormium.core
+namespace Stormium.Core
 {
     [UpdateAfter(typeof(STUpdateOrder.UORigidbodyUpdateAfter))]
     public class STCameraManager : ComponentSystem
