@@ -16,29 +16,10 @@ namespace Stormium.Core.Networking
     {
         void SubscribeSystem();
     }
-
-    public interface ISnapshotGenerateLocal : ISnapshotEventObject
-    {
-        void GenerateLocal(DataBufferWriter data);
-    }
-
-    public interface ISnapshotLocalManageSingleEntityData : ISnapshotEventObject
-    {
-        void LocalWriteDataSingle(Entity worldTarget, Entity snapshotTarget, DataBufferWriter data);
-        void LocalReadDataSingle(Entity worldTarget, Entity snapshotTarget, DataBufferReader data);
-    }
     
-    public interface ISnapshotLocalManageJobEntityData : ISnapshotEventObject
+    public interface ISnapshotManageForClient : ISnapshotEventObject
     {
-        void LocalWriteDataJob(NativeArray<Entity> entityArray, ref JobHandle jobHandle);
-        void LocalReadDataJob(NativeArray<Entity> entityArray, DataBufferReader data, ref JobHandle jobHandle);
-    }
-
-    public interface ISnapshotNetworkManageEntityData : ISnapshotEventObject
-    {
-        bool NetworkWriteFromLocalData();
-        
-        void NetworkWriteData(Entity worldTarget, Entity snapshotTarget, DataBufferWriter data);
-        void NetworkReadData(Entity worldTarget, Entity snapshotTarget, DataBufferReader data);
+        DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle);
+        void ReadData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle);
     }
 }

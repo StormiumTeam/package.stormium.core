@@ -4,10 +4,13 @@ using package.stormiumteam.networking;
 using package.stormiumteam.networking.extensions.NetEcs;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 namespace Stormium.Core.Networking
 {
@@ -15,20 +18,82 @@ namespace Stormium.Core.Networking
     {
     }
 
-    public abstract class SnapshotEntityDataStreamer<TState> : JobComponentSystem, ISnapshotSubscribe, ISnapshotLocalManageEntityData, ISnapshotNetworkManageEntityData
+    public abstract class SnapshotEntityDataStreamer<TState> : JobComponentSystem, ISnapshotSubscribe, ISnapshotManageForClient
         where TState : struct, IStateData, IComponentData
     {
-        private PatternResult m_SystemPattern;
+        [BurstCompile]
+        [RequireComponentTag(typeof(GenerateEntitySnapshot))]
+        private struct WriteDataJob : IJobProcessComponentDataWithEntity<TState>
+        {
+            public SnapshotReceiver Receiver;
+            public SnapshotSystemOutput Output;
+
+            [ReadOnly]
+            public ComponentDataFromEntity<DataChanged<TState>> ChangeFromEntity;
+            
+            public void Execute(Entity entity, int chunkIndex, ref TState state)
+            {
+                // no linear data :(
+                var change = new DataChanged<TState> {IsDirty = 1};
+                if (ChangeFromEntity.Exists(entity)) 
+                    change = ChangeFromEntity[entity];
+
+                if (Output.ShouldSkip(Receiver, change))
+                {
+                    Output.Data.Write(ref entity.Index);
+                }
+                else
+                {
+                    Output.Data.Write(ref entity);
+                }
+                
+                Output.Data.Write(ref state);
+            }
+        }
         
+        private struct ReadDataJob : IJobParallelFor
+        {
+            public NativeArray<Entity> EntitiesFromSystem;
+            public SnapshotReceiver Receiver;
+            public SnapshotRuntime Runtime;
+            public SnapshotSystemInput Input;
+            public ComponentDataFromEntity<TState> StateFromEntity;
+            
+            public void Execute(int index)
+            {
+                //if (Input.GetSkipReason() != SkipReason.None) return;
+                var entityIndex = Input.Data.ReadValue<int>();
+                if (entityIndex == 0) return; // skip
+                var entityVersion = Input.Data.ReadValue<int>();
+                
+                var worldEntity = Runtime.EntityToWorld(new Entity{Index = entityIndex, Version = entityVersion});
+                StateFromEntity[worldEntity] = Input.Data.ReadValue<TState>();
+            }
+        }
+
+        private PatternResult m_SystemPattern;
+
+        protected ComponentGroup WriteGroup;
+        protected ComponentGroup ReadGroup;
+        protected ComponentDataFromEntity<DataChanged<TState>> Changed;
         protected ComponentDataFromEntity<TState> States;
 
         public PatternResult SystemPattern => m_SystemPattern;
+
+        private int m_SizeOfState = UnsafeUtility.SizeOf<TState>();
+        private int m_SizeOfEntity = UnsafeUtility.SizeOf<Entity>();
         
         protected override void OnCreateManager()
         {
             World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
+            World.CreateManager<DataChangedSystem<TState>>();
 
             m_SystemPattern = RegisterPattern();
+
+            WriteGroup = GetComponentGroup(typeof(TState), typeof(DataChanged<TState>));
+            ReadGroup = GetComponentGroup(typeof(TState));
+            Changed = GetComponentDataFromEntity<DataChanged<TState>>();
+            States = GetComponentDataFromEntity<TState>();
         }
 
         protected virtual PatternResult RegisterPattern()
@@ -45,33 +110,49 @@ namespace Stormium.Core.Networking
         
         public void SubscribeSystem()
         {
-            UpdateInjectedComponentGroups();
-            return;
+            Changed = GetComponentDataFromEntity<DataChanged<TState>>();
+            States  = GetComponentDataFromEntity<TState>();
         }
 
-        public virtual void LocalWriteData(Entity worldTarget, Entity snapshotTarget, DataBufferWriter data)
+        public DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle)
         {
-            data.CpyWrite(EntityManager.GetComponentData<TState>(worldTarget));
+            var length = WriteGroup.CalculateLength();
+            var buffer = new DataBufferWriter(Allocator.TempJob, true, length * m_SizeOfState + length * m_SizeOfEntity);
+            var output = new SnapshotSystemOutput(buffer);
+            
+            Profiler.BeginSample("SendJob");
+            /*jobHandle = new WriteDataJob
+            {
+                Output = output,
+                Receiver = receiver,
+                ChangeFromEntity = Changed
+            }.ScheduleSingle(this, jobHandle);*/
+            new WriteDataJob
+            {
+                Output           = output,
+                Receiver         = receiver,
+                ChangeFromEntity = Changed
+            }.Run(this);
+            Profiler.EndSample();
+            
+            return buffer;
         }
 
-        public virtual void LocalReadData(Entity worldTarget, Entity snapshotTarget, DataBufferReader data)
+        public void ReadData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle)
         {
-            EntityManager.SetComponentData(worldTarget, data.ReadValue<TState>());
-        }
+             var buffer = runtime.Data.Reader;
+             var input = new SnapshotSystemInput(buffer);
 
-        public virtual bool NetworkWriteFromLocalData()
-        {
-            return true;
-        }
-
-        public virtual void NetworkWriteData(Entity worldTarget, Entity snapshotTarget, DataBufferWriter data)
-        {
-            throw new NotImplementedException("Not implemented as NetworkWriteFromLocalData is true.");
-        }
-
-        public virtual void NetworkReadData(Entity worldTarget, Entity snapshotTarget, DataBufferReader data)
-        {
-            throw new NotImplementedException("Not implemented as NetworkWriteFromLocalData is true.");
+             var systemEntities = input.ReadSystemEntities(runtime.Data.Entities, Allocator.TempJob);
+             
+             jobHandle = new ReadDataJob
+             {
+                 EntitiesFromSystem = systemEntities,
+                 Receiver = receiver,
+                 Input = input,
+                 Runtime = runtime,
+                 StateFromEntity = States
+             }.Schedule(systemEntities.Length, 1, jobHandle);
         }
     }
 }

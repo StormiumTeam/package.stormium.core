@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using UnityEngine;
@@ -13,37 +17,61 @@ namespace Stormium.Core.Networking
 {
     public class SnapshotManager : ComponentSystem
     {
-        private CompiledSnapshot LocalSnapshot;
+        public struct SnapshotGeneration
+        {
+            public JobHandle JobHandle;
+            public DataBufferWriter Data;
+            public SnapshotRuntime Runtime;
+
+            public void Dispose()
+            {
+                Runtime.Dispose();
+                Data.Dispose();
+            }
+        }
         
         private ComponentDataFromEntity<NetworkInstanceData> m_NetworkInstanceFromEntity;
         private ComponentGroup m_NetworkClientGroup;
         private ComponentGroup m_GenerateSnapshotEntityGroup;
 
         protected override void OnCreateManager()
-        {
-            LocalSnapshot = new CompiledSnapshot
-            {
-                EntityData = new FastDictionary<Entity, FastDictionary<int, byte[]>>(),
-                SystemData = new FastDictionary<int, byte[]>(),
-                SystemIds  = new FastDictionary<string, int>(),
-                
-                TrackedSystems = new NativeList<int>(24, Allocator.Persistent),
-                TrackedEntities = new NativeList<Entity>(128, Allocator.Persistent)
-            };
-            
+        {                        
             m_NetworkInstanceFromEntity = GetComponentDataFromEntity<NetworkInstanceData>();
             m_NetworkClientGroup = GetComponentGroup(typeof(StormiumClient), typeof(ClientToNetworkInstance));
             m_GenerateSnapshotEntityGroup = GetComponentGroup(typeof(GenerateEntitySnapshot));
         }
 
+        private List<SnapshotGeneration> m_Generations = new List<SnapshotGeneration>();
+
         protected override void OnUpdate()
         {
             var entityLength = m_GenerateSnapshotEntityGroup.CalculateLength();
             if (entityLength < 0) return;
-            
-            GenerateLocalSnapshot(ref LocalSnapshot, m_GenerateSnapshotEntityGroup.GetEntityArray());
 
-            var clientLength = m_NetworkClientGroup.CalculateLength();
+            m_Generations.Clear();
+
+            var entities = TransformEntityArray(m_GenerateSnapshotEntityGroup.GetEntityArray());
+            for (int i = 0; i != 100; i++)
+            {
+                Profiler.BeginSample("Generation#" + i);
+                Profiler.BeginSample("StartGenerating()");
+                var receiver = new SnapshotReceiver(default, false);
+                m_Generations.Add(StartGenerating(receiver, entities));
+                Profiler.EndSample();
+                
+                Profiler.BeginSample("CompleteGeneration()");
+                CompleteGeneration(m_Generations[m_Generations.Count - 1]);
+                Profiler.EndSample();
+                Profiler.EndSample();
+            }
+            entities.Dispose();
+
+            foreach (var generation in m_Generations)
+            {
+                //CompleteGeneration(generation);
+            }
+
+            /*var clientLength = m_NetworkClientGroup.CalculateLength();
             if (clientLength < 0) return;
 
             var entityArray = m_NetworkClientGroup.GetEntityArray();
@@ -62,76 +90,93 @@ namespace Stormium.Core.Networking
                 {
                     GenerateNetworkClientSnapshot(entity, ref LocalSnapshot, ref dataBuffer, ref jobHandle);
                 }
-            }
+            }*/
         }
 
         // STRUCTURE:
         // Write System Data
         // Write Entity Data from Systems
-        public void GenerateLocalSnapshot(ref CompiledSnapshot newSnapshot, EntityArray entities)
+        private List<DataBufferWriter> m_BufferList = new List<DataBufferWriter>(8);
+        
+        [BurstCompile]
+        struct TransformEntityArrayJob : IJobParallelFor
         {
-            var dataBuffer = new DataBufferWriter(Allocator.Temp, 1024);
+            public EntityArray EntityArray;
+            public NativeArray<Entity> Entities;
             
-            newSnapshot.EmptyTracked();
-
-            foreach (var obj in AppEvent<ISnapshotSubscribe>.GetObjEvents())
+            public void Execute(int index)
             {
-                obj.SubscribeSystem();
-                
-                var pattern = obj.GetSystemPattern();
-                
-                newSnapshot.SetSystemPattern(pattern);
-                newSnapshot.TrackSystem(pattern.Id);
+                Entities[index] = EntityArray[index];
             }
-            
-            // Write System Data
-            foreach (var obj in AppEvent<ISnapshotGenerateLocal>.GetObjEvents())
-            {
-                dataBuffer.Buffer.Clear();
-                
-                var pattern = obj.GetSystemPattern();
-                
-                obj.GenerateLocal(dataBuffer);
-                
-                newSnapshot.SetSystemDataFromNativeBuffer(pattern, dataBuffer);
-            }
-            
-            // Write Entity Data
-            var entityLength = entities.Length;
-            Profiler.BeginSample("Write Entity Data");
-            for (int i = 0; i != entityLength; i++)
-            {
-                var entity = entities[i];
-                newSnapshot.TrackEntity(entity);
-
-                foreach (var obj in AppEvent<ISnapshotLocalManageEntityData>.GetObjEvents())
-                {
-                    dataBuffer.Buffer.Clear();
-
-                    var pattern = obj.GetSystemPattern();
-                    
-                    Profiler.BeginSample("LocalWriteData");
-                    obj.LocalWriteData(entity, entity, dataBuffer);
-                    Profiler.EndSample();
-                    Profiler.BeginSample("WriteEntityData");
-                    newSnapshot.WriteEntityData(pattern, entity, dataBuffer);
-                    Profiler.EndSample();
-                }
-            }
-            Profiler.EndSample();
-            
-            dataBuffer.Buffer.Clear();
-
-            Profiler.BeginSample("Clear useless data");
-            newSnapshot.DeleteNonTracked();
-            Profiler.EndSample();
         }
 
-        public void GenerateNetworkClientSnapshot(Entity client, ref CompiledSnapshot snapshot, ref DataBufferWriter dataBuffer, ref JobHandle jobHandle)
+        public NativeArray<Entity> TransformEntityArray(EntityArray entityArray)
         {
-            foreach (var obj in AppEvent<ISnapshotNetworkManageEntityData>.GetObjEvents())
+            Profiler.BeginSample("Transform EntityArray into NativeArray");
+            var entityLength = entityArray.Length;
+            var entities     = new NativeArray<Entity>(entityLength, Allocator.TempJob);
+            new TransformEntityArrayJob
             {
+                EntityArray = entityArray,
+                Entities    = entities
+            }.Run(entityLength);
+            Profiler.EndSample();
+
+            return entities;
+        }
+
+        public SnapshotGeneration StartGenerating(SnapshotReceiver receiver, NativeArray<Entity> entities)
+        {
+            JobHandle jobHandle = default;
+            
+            Profiler.BeginSample("Vars");
+            var buffer = new DataBufferWriter(Allocator.TempJob, 1024);
+            var data = new SnapshotData(buffer, entities);
+            var runtime = new SnapshotRuntime(data, Allocator.TempJob);
+            Profiler.EndSample();
+            
+            Profiler.BeginSample("Subscribe");
+            foreach (var system in AppEvent<ISnapshotSubscribe>.GetObjEvents())
+            {
+                system.SubscribeSystem();
             }
+            Profiler.EndSample();
+            
+            m_BufferList.Clear();
+            
+            Profiler.BeginSample("ISnapshotManageForClient");
+            foreach (var system in AppEvent<ISnapshotManageForClient>.GetObjEvents())
+            {
+                m_BufferList.Add(system.WriteData(receiver, runtime, ref jobHandle));
+            }
+            Profiler.EndSample();
+
+            return new SnapshotGeneration()
+            {
+                Data      = buffer,
+                JobHandle = jobHandle,
+                Runtime   = runtime
+            };
+        }
+
+        public void CompleteGeneration(SnapshotGeneration generation)
+        {
+            Profiler.BeginSample("Complete Jobs");
+            generation.JobHandle.Complete();
+            Profiler.EndSample();
+            
+            Profiler.BeginSample("Join buffers");
+            foreach (var systemBuffer in m_BufferList)
+            {
+                //buffer.WriteStatic(systemBuffer);
+                
+                systemBuffer.Dispose();
+            }
+            Profiler.EndSample();
+            
+            //Debug.Log("Final length: " + buffer.Length + ", Expected: " + (UnsafeUtility.SizeOf<SnapshotEntityDataTransformSystem.State>() * 2 + UnsafeUtility.SizeOf<SnapshotEntityDataVelocitySystem.State>() * 2));
+
+            generation.Dispose();
         }
     }
 }

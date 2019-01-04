@@ -6,6 +6,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
+using UnityEngine;
 using Random = UnityEngine.Random;
 
 namespace Stormium.Core.Networking
@@ -23,14 +24,7 @@ namespace Stormium.Core.Networking
     {
         public struct State : IStateData, IComponentData
         {
-            public float3 velocity;
-            public float3 angularVelocity;
-            public float3 friction;
-            public quaternion time0;
-            public quaternion time1;
-            public quaternion time2;
-            public quaternion time3;
-            public float mass;
+            public unsafe fixed double matrix[2];
         }
     }
 }
