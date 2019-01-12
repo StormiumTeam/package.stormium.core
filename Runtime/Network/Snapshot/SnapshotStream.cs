@@ -187,6 +187,8 @@ namespace Stormium.Core.Networking
         {
             SnapshotToWorld.Dispose();
             WorldToSnapshot.Dispose();
+            
+            Data.Entities.Dispose();
         }
     }
 
@@ -196,25 +198,28 @@ namespace Stormium.Core.Networking
         
         public DataBufferReader Reader;
         public DataBufferWriter Writer;
+
+        public int Tick;
         
         public NativeArray<Entity> Entities;
 
-        public SnapshotData(NativeArray<Entity> entities)
+        public SnapshotData(NativeArray<Entity> entities, int tick)
         {
             SnapshotType = SnapshotType.Unknown;
             Reader = default;
             Writer = default;
 
             Entities = entities;
+            Tick = tick;
         }
 
-        public SnapshotData(DataBufferReader reader, NativeArray<Entity> entities) : this(entities)
+        public SnapshotData(DataBufferReader reader, NativeArray<Entity> entities, int tick) : this(entities, tick)
         {
             SnapshotType = SnapshotType.Read;
             Reader = reader;
         }
 
-        public SnapshotData(DataBufferWriter writer, NativeArray<Entity> entities) : this(entities)
+        public SnapshotData(DataBufferWriter writer, NativeArray<Entity> entities, int tick) : this(entities, tick)
         {
             SnapshotType = SnapshotType.Write;
             Writer = writer;

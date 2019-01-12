@@ -30,44 +30,67 @@ namespace Stormium.Core.Networking
 
             [ReadOnly]
             public ComponentDataFromEntity<DataChanged<TState>> ChangeFromEntity;
-            
+
             public void Execute(Entity entity, int chunkIndex, ref TState state)
             {
                 // no linear data :(
                 var change = new DataChanged<TState> {IsDirty = 1};
-                if (ChangeFromEntity.Exists(entity)) 
+                if (ChangeFromEntity.Exists(entity))
                     change = ChangeFromEntity[entity];
 
                 if (Output.ShouldSkip(Receiver, change))
                 {
-                    Output.Data.Write(ref entity.Index);
+                    Output.Data.CpyWrite(0);
+                    return;
                 }
-                else
-                {
-                    Output.Data.Write(ref entity);
-                }
-                
+
+                Output.Data.Write(ref entity);
                 Output.Data.Write(ref state);
             }
         }
-        
+
         private struct ReadDataJob : IJobParallelFor
         {
-            public NativeArray<Entity> EntitiesFromSystem;
-            public SnapshotReceiver Receiver;
-            public SnapshotRuntime Runtime;
-            public SnapshotSystemInput Input;
+            public SnapshotSender                  Sender;
+            public SnapshotRuntime                 Runtime;
+            public SnapshotSystemInput             Input;
             public ComponentDataFromEntity<TState> StateFromEntity;
-            
+            public EntityCommandBuffer.Concurrent EntityCommandBuffer;
+
+            [DeallocateOnJobCompletion]
+            public NativeArray<int> Cursor;
+
+            [NativeSetThreadIndex]
+            public int JobIndex;
+
+            private void UpdateCursor()
+            {
+                Cursor[0] = Input.Data.Length;
+            }
+
             public void Execute(int index)
             {
-                //if (Input.GetSkipReason() != SkipReason.None) return;
+                var readMarker    = Input.Data.CreateMarker(Cursor[0]);
+                var entityVersion = Input.Data.ReadValue<int>(readMarker);
+                if (entityVersion == 0)
+                {
+                    UpdateCursor();
+                    return; // skip
+                }
+
                 var entityIndex = Input.Data.ReadValue<int>();
-                if (entityIndex == 0) return; // skip
-                var entityVersion = Input.Data.ReadValue<int>();
-                
-                var worldEntity = Runtime.EntityToWorld(new Entity{Index = entityIndex, Version = entityVersion});
-                StateFromEntity[worldEntity] = Input.Data.ReadValue<TState>();
+
+                var worldEntity = Runtime.EntityToWorld(new Entity {Index = entityIndex, Version = entityVersion});
+                if (StateFromEntity.Exists(worldEntity))
+                {
+                    StateFromEntity[worldEntity] = Input.Data.ReadValue<TState>();
+                }
+                else
+                {
+                    EntityCommandBuffer.AddComponent(JobIndex, worldEntity, Input.Data.ReadValue<TState>());
+                }
+
+                UpdateCursor();
             }
         }
 
@@ -80,8 +103,8 @@ namespace Stormium.Core.Networking
 
         public PatternResult SystemPattern => m_SystemPattern;
 
-        private int m_SizeOfState = UnsafeUtility.SizeOf<TState>();
-        private int m_SizeOfEntity = UnsafeUtility.SizeOf<Entity>();
+        private readonly int m_SizeOfState = UnsafeUtility.SizeOf<TState>();
+        private readonly int m_SizeOfEntity = UnsafeUtility.SizeOf<Entity>();
         
         protected override void OnCreateManager()
         {
@@ -90,7 +113,7 @@ namespace Stormium.Core.Networking
 
             m_SystemPattern = RegisterPattern();
 
-            WriteGroup = GetComponentGroup(typeof(TState), typeof(DataChanged<TState>));
+            WriteGroup = GetComponentGroup(typeof(TState));
             ReadGroup = GetComponentGroup(typeof(TState));
             Changed = GetComponentDataFromEntity<DataChanged<TState>>();
             States = GetComponentDataFromEntity<TState>();
@@ -117,42 +140,33 @@ namespace Stormium.Core.Networking
         public DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle)
         {
             var length = WriteGroup.CalculateLength();
-            var buffer = new DataBufferWriter(Allocator.TempJob, true, length * m_SizeOfState + length * m_SizeOfEntity);
+            var buffer = new DataBufferWriter(Allocator.TempJob, true, length * m_SizeOfState + length);
             var output = new SnapshotSystemOutput(buffer);
-            
-            Profiler.BeginSample("SendJob");
-            /*jobHandle = new WriteDataJob
-            {
-                Output = output,
-                Receiver = receiver,
-                ChangeFromEntity = Changed
-            }.ScheduleSingle(this, jobHandle);*/
+
+            output.Data.WriteDynInteger((ulong) length);
             new WriteDataJob
             {
                 Output           = output,
                 Receiver         = receiver,
                 ChangeFromEntity = Changed
             }.Run(this);
-            Profiler.EndSample();
             
             return buffer;
         }
 
-        public void ReadData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle)
+        public void ReadData(SnapshotSender sender, SnapshotRuntime runtime, ref JobHandle jobHandle)
         {
-             var buffer = runtime.Data.Reader;
              var input = new SnapshotSystemInput(buffer);
 
-             var systemEntities = input.ReadSystemEntities(runtime.Data.Entities, Allocator.TempJob);
-             
-             jobHandle = new ReadDataJob
+             var length = (int) runtime.Data.Reader.ReadDynInteger();
+             new ReadDataJob
              {
-                 EntitiesFromSystem = systemEntities,
-                 Receiver = receiver,
+                 Cursor = new NativeArray<int>(1, Allocator.TempJob),
+                 Sender = sender,
                  Input = input,
                  Runtime = runtime,
                  StateFromEntity = States
-             }.Schedule(systemEntities.Length, 1, jobHandle);
+             }.Run(length);
         }
     }
 }

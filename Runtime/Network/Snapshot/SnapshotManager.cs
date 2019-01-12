@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
@@ -19,85 +20,98 @@ namespace Stormium.Core.Networking
     {
         public struct SnapshotGeneration
         {
+            private bool m_Disposed;
+            
             public JobHandle JobHandle;
             public DataBufferWriter Data;
             public SnapshotRuntime Runtime;
+            public bool IsCreated => !m_Disposed && Runtime.Data.SnapshotType != SnapshotType.Unknown;
 
             public void Dispose()
             {
+                m_Disposed = true;
+                
                 Runtime.Dispose();
                 Data.Dispose();
             }
         }
         
         private ComponentDataFromEntity<NetworkInstanceData> m_NetworkInstanceFromEntity;
+        private ComponentGroup m_LocalClientGroup;
         private ComponentGroup m_NetworkClientGroup;
         private ComponentGroup m_GenerateSnapshotEntityGroup;
 
         protected override void OnCreateManager()
-        {                        
+        {
+            m_LocalClientGroup = GetComponentGroup(typeof(StormiumClient), typeof(StormiumLocalTag));
             m_NetworkInstanceFromEntity = GetComponentDataFromEntity<NetworkInstanceData>();
             m_NetworkClientGroup = GetComponentGroup(typeof(StormiumClient), typeof(ClientToNetworkInstance));
             m_GenerateSnapshotEntityGroup = GetComponentGroup(typeof(GenerateEntitySnapshot));
         }
-
-        private List<SnapshotGeneration> m_Generations = new List<SnapshotGeneration>();
-
+        
         protected override void OnUpdate()
         {
+            return;
+            
             var entityLength = m_GenerateSnapshotEntityGroup.CalculateLength();
-            if (entityLength < 0) return;
-
-            m_Generations.Clear();
+            if (entityLength < 0)
+                return;
 
             var entities = TransformEntityArray(m_GenerateSnapshotEntityGroup.GetEntityArray());
-            for (int i = 0; i != 100; i++)
+            if (!DoLocalGeneration(entities, default, Allocator.TempJob, out _))
             {
-                Profiler.BeginSample("Generation#" + i);
-                Profiler.BeginSample("StartGenerating()");
-                var receiver = new SnapshotReceiver(default, false);
-                m_Generations.Add(StartGenerating(receiver, entities));
-                Profiler.EndSample();
-                
-                Profiler.BeginSample("CompleteGeneration()");
-                CompleteGeneration(m_Generations[m_Generations.Count - 1]);
-                Profiler.EndSample();
-                Profiler.EndSample();
-            }
-            entities.Dispose();
-
-            foreach (var generation in m_Generations)
-            {
-                //CompleteGeneration(generation);
+                entities.Dispose();
+                return;
             }
 
-            /*var clientLength = m_NetworkClientGroup.CalculateLength();
-            if (clientLength < 0) return;
+            var clientLength = m_NetworkClientGroup.CalculateLength();
+            if (clientLength < 0)
+            {
+                entities.Dispose();
+                return;
+            }
 
-            var entityArray = m_NetworkClientGroup.GetEntityArray();
+            var entityArray          = m_NetworkClientGroup.GetEntityArray();
             var clientToNetworkArray = m_NetworkClientGroup.GetComponentDataArray<ClientToNetworkInstance>();
-            for (int i = 0; i != clientLength; i++)
+            /*for (int i = 0; i != clientLength; i++)
             {
                 // A threaded job for each client snapshot could be possible?
 
                 var entity          = entityArray[i];
                 var networkInstance = m_NetworkInstanceFromEntity[clientToNetworkArray[i].Target];
                 var netCmd          = networkInstance.Commands;
-                var jobHandle       = default(JobHandle);
+                var receiver        = new SnapshotReceiver(entity, true);
 
                 DataBufferWriter dataBuffer;
                 using (dataBuffer = new DataBufferWriter(Allocator.Temp, 2048))
                 {
-                    GenerateNetworkClientSnapshot(entity, ref LocalSnapshot, ref dataBuffer, ref jobHandle);
+                    var generation = StartGenerating(receiver, default, Allocator.TempJob, entities);
+                    CompleteGeneration(generation);
+
+                    dataBuffer.WriteStatic(generation.Data);
                 }
             }*/
+
+            entities.Dispose();
         }
 
-        // STRUCTURE:
-        // Write System Data
-        // Write Entity Data from Systems
-        private List<DataBufferWriter> m_BufferList = new List<DataBufferWriter>(8);
+        public NativeArray<Entity> GetSnapshotWorldEntities(Allocator allocator)
+        {
+            return TransformEntityArray(m_GenerateSnapshotEntityGroup.GetEntityArray(), allocator);
+        }
         
+        public bool MakeACompleteLocalGeneration(out SnapshotGeneration generation, GameTime gt, Allocator allocator)
+        {
+            var entities = TransformEntityArray(m_GenerateSnapshotEntityGroup.GetEntityArray());
+            if (!DoLocalGeneration(entities, gt, allocator, out generation))
+            {
+                entities.Dispose();
+                return false;
+            }
+
+            return true;
+        }
+
         [BurstCompile]
         struct TransformEntityArrayJob : IJobParallelFor
         {
@@ -110,46 +124,78 @@ namespace Stormium.Core.Networking
             }
         }
 
-        public NativeArray<Entity> TransformEntityArray(EntityArray entityArray)
+        public NativeArray<Entity> TransformEntityArray(EntityArray entityArray, Allocator allocator)
         {
-            Profiler.BeginSample("Transform EntityArray into NativeArray");
             var entityLength = entityArray.Length;
-            var entities     = new NativeArray<Entity>(entityLength, Allocator.TempJob);
+            var entities     = new NativeArray<Entity>(entityLength, allocator);
+            
             new TransformEntityArrayJob
             {
                 EntityArray = entityArray,
                 Entities    = entities
             }.Run(entityLength);
-            Profiler.EndSample();
 
             return entities;
         }
 
-        public SnapshotGeneration StartGenerating(SnapshotReceiver receiver, NativeArray<Entity> entities)
+        public bool DoLocalGeneration(NativeArray<Entity> entitiesToGenerate, GameTime gt, Allocator allocator, out SnapshotGeneration snapshotGeneration)
         {
+            snapshotGeneration = default;
+            
+            var clientLength = m_LocalClientGroup.CalculateLength();
+            if (clientLength <= 0)
+                return false;
+
+            var clientEntity = m_LocalClientGroup.GetEntityArray()[0];
+            var receiver = new SnapshotReceiver(clientEntity, false);
+            snapshotGeneration = GenerateFor(receiver, gt, allocator, entitiesToGenerate);
+
+            return true;
+        }
+        
+        public SnapshotGeneration GenerateFor(SnapshotReceiver receiver, GameTime gt, Allocator allocator, NativeArray<Entity> entities)
+        {
+            if (gt.Tick < 0) throw new Exception("Tick is inferior to 0");
+            
             JobHandle jobHandle = default;
             
-            Profiler.BeginSample("Vars");
-            var buffer = new DataBufferWriter(Allocator.TempJob, 1024);
-            var data = new SnapshotData(buffer, entities);
-            var runtime = new SnapshotRuntime(data, Allocator.TempJob);
-            Profiler.EndSample();
+            var buffer = new DataBufferWriter(allocator, 1024);
+            var data = new SnapshotData(buffer, entities, gt.Tick);
+            var runtime = new SnapshotRuntime(data, allocator);
+
+            buffer.Write(entities.Length);
+            for (var i = 0; i != entities.Length; i++)
+            {
+                buffer.CpyWrite(entities[i]);
+            }
             
-            Profiler.BeginSample("Subscribe");
             foreach (var system in AppEvent<ISnapshotSubscribe>.GetObjEvents())
             {
                 system.SubscribeSystem();
             }
-            Profiler.EndSample();
+
+            var objEvents = AppEvent<ISnapshotManageForClient>.GetObjEvents();
+            buffer.Write(objEvents.Length);
             
-            m_BufferList.Clear();
-            
-            Profiler.BeginSample("ISnapshotManageForClient");
+            // System Loop
+            // -----------------
+            // Int32 - Index To Next System
+            // Int32 - System Pattern Id
+            // Data? - System Data
+            // -----------------
             foreach (var system in AppEvent<ISnapshotManageForClient>.GetObjEvents())
             {
-                m_BufferList.Add(system.WriteData(receiver, runtime, ref jobHandle));
+                var nextDataLength = buffer.CpyWrite(0);
+                buffer.Write(system.GetSystemPattern().Id);
+                
+                var sysBuffer = system.WriteData(receiver, runtime, ref jobHandle);
+                
+                jobHandle.Complete();
+                
+                buffer.WriteStatic(sysBuffer);
+                sysBuffer.Dispose();
+                buffer.Write(buffer.Length, nextDataLength);
             }
-            Profiler.EndSample();
 
             return new SnapshotGeneration()
             {
@@ -159,24 +205,56 @@ namespace Stormium.Core.Networking
             };
         }
 
-        public void CompleteGeneration(SnapshotGeneration generation)
+        public SnapshotRuntime ReadApplySnapshot(DataBufferReader reader, Allocator allocator, SnapshotRuntime previousRuntime = default)
         {
-            Profiler.BeginSample("Complete Jobs");
-            generation.JobHandle.Complete();
-            Profiler.EndSample();
-            
-            Profiler.BeginSample("Join buffers");
-            foreach (var systemBuffer in m_BufferList)
+            ISnapshotManageForClient GetSystem(int id)
             {
-                //buffer.WriteStatic(systemBuffer);
-                
-                systemBuffer.Dispose();
+                return AppEvent<ISnapshotManageForClient>.GetObjEvents().FirstOrDefault(system => system.GetSystemPattern().Id == id);
             }
-            Profiler.EndSample();
             
-            //Debug.Log("Final length: " + buffer.Length + ", Expected: " + (UnsafeUtility.SizeOf<SnapshotEntityDataTransformSystem.State>() * 2 + UnsafeUtility.SizeOf<SnapshotEntityDataVelocitySystem.State>() * 2));
+            var bank = World.GetExistingManager<NetPatternSystem>();
+            var runtime = new SnapshotRuntime();
+            
+            var tick = reader.ReadValue<int>();
+            var entityArray = new NativeArray<Entity>(reader.ReadValue<int>(), allocator);
+            for (var i = 0; i != entityArray.Length; i++)
+            {
+                entityArray[i] = reader.ReadValue<Entity>();
+            }
 
-            generation.Dispose();
+            var sysLength = reader.ReadValue<int>();
+            for (var i = 0; i != sysLength; i++)
+            {
+                var pattern = reader.ReadValue<int>();
+                var nextSysDataIndex = reader.ReadValue<int>();
+                var sysBuffer = new DataBufferReader(reader, reader.CurrReadIndex, nextSysDataIndex);
+                var system = GetSystem(pattern);
+                var sender = new SnapshotSender();
+
+                var jobHandle = new JobHandle();
+                system.ReadData(sender, runtime, sysBuffer, ref jobHandle);
+                
+                if (reader.CurrReadIndex != nextSysDataIndex)
+                {
+                    Debug.LogError("Incoherence?");
+                }
+                reader.CurrReadIndex = nextSysDataIndex;
+            }
+
+            return default;
+        }
+
+        public SnapshotRuntime ReadApplySnapshot<TEntityDataMgr, TSystemDataMgr>(DataBufferReader data, TEntityDataMgr entityDataMgr, TSystemDataMgr systemDataMgr)
+        {
+            
+        }
+        
+        public void ApplySnapshot(SnapshotRuntime runtime)
+        {
+            ref var reader = ref runtime.Data.Reader;
+
+            // skip ticks
+            reader.CurrReadIndex = sizeof(int);
         }
     }
 }

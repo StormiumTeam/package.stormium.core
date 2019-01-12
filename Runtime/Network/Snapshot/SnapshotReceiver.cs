@@ -13,4 +13,9 @@ namespace Stormium.Core.Networking
             WantFullSnapshot = (byte)(wantFullSnapshot ? 1 : 0);
         }
     }
+
+    public struct SnapshotSender
+    {
+        public Entity Client;
+    }
 }

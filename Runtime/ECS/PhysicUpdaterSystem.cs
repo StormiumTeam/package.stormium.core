@@ -76,9 +76,8 @@ namespace package.stormium.core
                 UpdateMode = PhysicUpdateMode.Framerate;
             }
 
-            var currentmode = UpdateMode;
-
-            if (currentmode == PhysicUpdateMode.TimeSettings)
+            var currentMode = UpdateMode;
+            if (currentMode == PhysicUpdateMode.TimeSettings)
             {
                 delta = Time.fixedDeltaTime;
                 
@@ -93,35 +92,45 @@ namespace package.stormium.core
             {
                 m_Timer = 0f;
 
-                if (currentmode == PhysicUpdateMode.Framerate)
+                switch (currentMode)
                 {
-                    delta = Time.deltaTime;
-                    
-                    LastFixedTimeStep = delta;
-                    LastIterationCount = 1;
-                }
-                else if (currentmode == PhysicUpdateMode.FrameCustom)
-                {
-                    var frameRate = Application.targetFrameRate;
-                    if (QualitySettings.vSyncCount == 1)
-                        frameRate = 60;
-                    else if (QualitySettings.vSyncCount == 2)
-                        frameRate = 30;
-
-                    if (frameRate == 0)
+                    case PhysicUpdateMode.Framerate:
                     {
-                        Debug.LogWarning("FrameCustom mode returned a 0 framerate");
-                    }
+                        delta = Time.deltaTime;
 
-                    delta = 1f / frameRate;
+                        LastFixedTimeStep  = delta;
+                        LastIterationCount = 1;
+                        break;
+                    }
+                    case PhysicUpdateMode.FrameCustom:
+                    {
+                        var frameRate = Application.targetFrameRate;
+                        if (QualitySettings.vSyncCount == 1)
+                            frameRate = 60;
+                        else if (QualitySettings.vSyncCount == 2)
+                            frameRate = 30;
+
+                        if (frameRate == 0)
+                        {
+                            Debug.LogWarning("FrameCustom mode returned a 0 framerate");
+                        }
+
+                        delta = 1f / frameRate;
                     
-                    LastFixedTimeStep = delta;
-                    LastIterationCount = Mathf.Max(1, CustomIterationCount);
-                }
-                else if (currentmode == PhysicUpdateMode.Custom)
-                {
-                    LastFixedTimeStep = CustomFixedTimeStep;
-                    LastIterationCount = CustomIterationCount;
+                        LastFixedTimeStep  = delta;
+                        LastIterationCount = Mathf.Max(1, CustomIterationCount);
+                        break;
+                    }
+                    case PhysicUpdateMode.Custom:
+                    {
+                        LastFixedTimeStep  = CustomFixedTimeStep;
+                        LastIterationCount = CustomIterationCount;
+                        break;
+                    }
+                    case PhysicUpdateMode.TimeSettings:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException();
                 }
             }
 

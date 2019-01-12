@@ -135,10 +135,7 @@ namespace package.stormium.core
         public Entity PrimaryTarget;
         public Entity SecondaryTarget;
 
-        public Entity this[int index]
-        {
-            get => index == 1 ? SecondaryTarget : PrimaryTarget;
-        }
+        public Entity this[int index] => index == 1 ? SecondaryTarget : PrimaryTarget;
 
         public StActionDualSwitch(Entity primary, Entity secondary)
         {

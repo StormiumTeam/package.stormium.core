@@ -16,10 +16,10 @@ namespace Stormium.Core.Networking
     {
         void SubscribeSystem();
     }
-    
+
     public interface ISnapshotManageForClient : ISnapshotEventObject
     {
         DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle);
-        void ReadData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle);
+        void             ReadData(SnapshotSender    sender,   SnapshotRuntime runtime, ref JobHandle jobHandle);
     }
 }

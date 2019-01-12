@@ -6,4 +6,9 @@ namespace Stormium.Core.Networking
     {
         
     }
+
+    public struct StormiumLocalTag : IComponentData
+    {
+        
+    }
 }
