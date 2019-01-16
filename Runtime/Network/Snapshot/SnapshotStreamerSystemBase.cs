@@ -21,76 +21,66 @@ namespace Stormium.Core.Networking
     public abstract class SnapshotEntityDataStreamer<TState> : JobComponentSystem, ISnapshotSubscribe, ISnapshotManageForClient
         where TState : struct, IStateData, IComponentData
     {
-        [BurstCompile]
+        //[BurstCompile]
         [RequireComponentTag(typeof(GenerateEntitySnapshot))]
         private struct WriteDataJob : IJobProcessComponentDataWithEntity<TState>
         {
             public SnapshotReceiver Receiver;
-            public SnapshotSystemOutput Output;
+            public DataBufferWriter Data;
 
             [ReadOnly]
             public ComponentDataFromEntity<DataChanged<TState>> ChangeFromEntity;
 
             public void Execute(Entity entity, int chunkIndex, ref TState state)
             {
-                // no linear data :(
                 var change = new DataChanged<TState> {IsDirty = 1};
                 if (ChangeFromEntity.Exists(entity))
                     change = ChangeFromEntity[entity];
 
-                if (Output.ShouldSkip(Receiver, change))
+                //Debug.Log(change.Update(ref state));
+                if (SnapshotOutputUtils.ShouldSkip(Receiver, change))
                 {
-                    Output.Data.CpyWrite(0);
+                    Data.WriteDynInteger(0);
                     return;
                 }
 
-                Output.Data.Write(ref entity);
-                Output.Data.Write(ref state);
+                Data.WriteDynInteger((ulong) entity.Version);
+                Data.WriteDynInteger((ulong) entity.Index);
+                Data.Write(ref state);
             }
         }
 
-        private struct ReadDataJob : IJobParallelFor
+        private struct ReadDataJob : IJob
         {
+            public int EntityLength;
+            
             public SnapshotSender                  Sender;
-            public SnapshotRuntime                 Runtime;
-            public SnapshotSystemInput             Input;
+            public StSnapshotRuntime               Runtime;
+            public DataBufferReader                Data;
+            public EntityCommandBuffer  EntityCommandBuffer;
+
+            [NativeDisableParallelForRestriction]
             public ComponentDataFromEntity<TState> StateFromEntity;
-            public EntityCommandBuffer.Concurrent EntityCommandBuffer;
 
-            [DeallocateOnJobCompletion]
-            public NativeArray<int> Cursor;
-
-            [NativeSetThreadIndex]
-            public int JobIndex;
-
-            private void UpdateCursor()
+            public void Execute()
             {
-                Cursor[0] = Input.Data.Length;
-            }
-
-            public void Execute(int index)
-            {
-                var readMarker    = Input.Data.CreateMarker(Cursor[0]);
-                var entityVersion = Input.Data.ReadValue<int>(readMarker);
-                if (entityVersion == 0)
+                for (var index = 0; index != EntityLength; index++)
                 {
-                    UpdateCursor();
-                    return; // skip
-                }
+                    var entityVersion = (int) Data.ReadDynInteger();
+                    if (entityVersion == 0)
+                    {
+                        continue; // skip
+                    }
 
-                var entityIndex = Input.Data.ReadValue<int>();
-
-                var worldEntity = Runtime.EntityToWorld(new Entity {Index = entityIndex, Version = entityVersion});
-                if (StateFromEntity.Exists(worldEntity))
-                {
-                    StateFromEntity[worldEntity] = Input.Data.ReadValue<TState>();
+                    var entityIndex = (int) Data.ReadDynInteger();
+                    var worldEntity = Runtime.EntityToWorld(new Entity {Index = entityIndex, Version = entityVersion});
+                    var state = Data.ReadValue<TState>();
+                    
+                    if (StateFromEntity.Exists(worldEntity))
+                        StateFromEntity[worldEntity] = state;
+                    else
+                        EntityCommandBuffer.AddComponent(worldEntity, state);
                 }
-                else
-                {
-                    EntityCommandBuffer.AddComponent(JobIndex, worldEntity, Input.Data.ReadValue<TState>());
-                }
-
-                UpdateCursor();
             }
         }
 
@@ -113,7 +103,7 @@ namespace Stormium.Core.Networking
 
             m_SystemPattern = RegisterPattern();
 
-            WriteGroup = GetComponentGroup(typeof(TState));
+            WriteGroup = GetComponentGroup(typeof(TState), typeof(GenerateEntitySnapshot));
             ReadGroup = GetComponentGroup(typeof(TState));
             Changed = GetComponentDataFromEntity<DataChanged<TState>>();
             States = GetComponentDataFromEntity<TState>();
@@ -137,36 +127,39 @@ namespace Stormium.Core.Networking
             States  = GetComponentDataFromEntity<TState>();
         }
 
-        public DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle)
+        public DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle)
         {
             var length = WriteGroup.CalculateLength();
-            var buffer = new DataBufferWriter(Allocator.TempJob, true, length * m_SizeOfState + length);
-            var output = new SnapshotSystemOutput(buffer);
+            var buffer = new DataBufferWriter(Allocator.TempJob, true, length * m_SizeOfState + length * m_SizeOfEntity);
 
-            output.Data.WriteDynInteger((ulong) length);
+            buffer.WriteDynInteger((ulong) length);
             new WriteDataJob
             {
-                Output           = output,
+                Data           = buffer,
                 Receiver         = receiver,
                 ChangeFromEntity = Changed
             }.Run(this);
-            
+
             return buffer;
         }
 
-        public void ReadData(SnapshotSender sender, SnapshotRuntime runtime, ref JobHandle jobHandle)
+        public void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle)
         {
-             var input = new SnapshotSystemInput(buffer);
+            using (var ecb = new EntityCommandBuffer(Allocator.TempJob))
+            {
+                var length = (int) sysData.ReadDynInteger();
+                new ReadDataJob
+                {
+                    EntityLength        = length,
+                    Sender              = sender,
+                    Data                = sysData,
+                    Runtime             = runtime,
+                    StateFromEntity     = States,
+                    EntityCommandBuffer = ecb
+                }.Run();
 
-             var length = (int) runtime.Data.Reader.ReadDynInteger();
-             new ReadDataJob
-             {
-                 Cursor = new NativeArray<int>(1, Allocator.TempJob),
-                 Sender = sender,
-                 Input = input,
-                 Runtime = runtime,
-                 StateFromEntity = States
-             }.Run(length);
+                ecb.Playback(EntityManager);
+            }
         }
     }
 }

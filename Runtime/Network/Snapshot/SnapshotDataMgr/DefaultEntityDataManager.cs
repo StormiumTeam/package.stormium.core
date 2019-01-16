@@ -9,7 +9,7 @@ namespace Stormium.Core.Networking.SnapshotDataMgr
         NativeArray<Entity> Entities { get; set; }
 
         void Read(SnapshotSender sender, DataBufferReader data);
-        void Write(SnapshotReceiver receiver, DataBufferWriter data);
+        void Write(SnapshotReceiver receiver, ref StSnapshotRuntime previousRuntime, ref DataBufferWriter data);
     }
     
     public struct DefaultEntityDataManager : IEntityDataMgr
@@ -31,7 +31,7 @@ namespace Stormium.Core.Networking.SnapshotDataMgr
             
         }
 
-        public void Write(SnapshotReceiver receiver, DataBufferWriter data)
+        public void Write(SnapshotReceiver receiver, ref StSnapshotRuntime previousRuntime, ref DataBufferWriter data)
         {
             
         }

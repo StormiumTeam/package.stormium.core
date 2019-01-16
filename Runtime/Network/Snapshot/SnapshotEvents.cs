@@ -19,7 +19,7 @@ namespace Stormium.Core.Networking
 
     public interface ISnapshotManageForClient : ISnapshotEventObject
     {
-        DataBufferWriter WriteData(SnapshotReceiver receiver, SnapshotRuntime runtime, ref JobHandle jobHandle);
-        void             ReadData(SnapshotSender    sender,   SnapshotRuntime runtime, ref JobHandle jobHandle);
+        DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle);
+        void             ReadData(SnapshotSender    sender,   StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle);
     }
 }

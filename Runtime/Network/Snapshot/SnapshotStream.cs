@@ -1,5 +1,6 @@
 using System;
 using package.stormiumteam.networking.runtime.lowlevel;
+using package.stormiumteam.shared.utils;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -8,153 +9,60 @@ using UnityEngine;
 
 namespace Stormium.Core.Networking
 {
-    public enum SnapshotType : byte
-    {
-        Unknown = 0,
-        Write = 1,
-        Read = 2,
-    }
-
     public enum SkipReason : byte
     {
         None,
         NoDeltaDifference
     }
-    
-    [BurstCompile]
-    public struct JobWriteSystemEntities : IJob
-    {
-        public DataBufferWriter Data;
-        public EntityArray SystemEntities;
-        public NativeArray<Entity> FromEntities;
-        public int Length;
 
-        public void Execute()
+    public static class SnapshotOutputUtils
+    {        
+        public static bool ShouldSkip(SnapshotReceiver receiver, SkipReason skipReason)
         {
-            for (var index = 0; index != Length; index++)
-            {
-                var compare = ((ushort) FromEntities.IndexOf<Entity, Entity>(SystemEntities[index]));
-                Data.CpyWrite(compare);
-            }
-        }
-    }
-
-    public struct SnapshotSystemOutput
-    {
-        public DataBufferWriter Data;
-
-        public SnapshotSystemOutput(DataBufferWriter data)
-        {
-            Data = data;
-        }
-        
-        public bool ShouldSkip(SnapshotReceiver receiver, SkipReason skipReason)
-        {
-            if (receiver.WantFullSnapshot == 1) return false;
+            if ((receiver.Flags & SnapshotReceiverFlags.FullData) != 0) return false;
             
             return skipReason != SkipReason.None;
         }
-        
-        public bool Skip(SnapshotReceiver receiver, SkipReason skipReason)
-        {
-            if (receiver.WantFullSnapshot == 1) skipReason = SkipReason.None;
-            
-            Data.CpyWrite((byte) skipReason);
-            return skipReason != SkipReason.None;
-        }
 
-        public bool ShouldSkip<T>(SnapshotReceiver receiver, DataChanged<T> changed)
+        public static bool ShouldSkip<T>(SnapshotReceiver receiver, DataChanged<T> changed)
             where T : struct, IComponentData
         {
-            return Skip(receiver, changed.IsDirty == 0 ? SkipReason.NoDeltaDifference : SkipReason.None);
-        }
-
-        public bool Skip<T>(SnapshotReceiver receiver, DataChanged<T> changed)
-            where T : struct, IComponentData
-        {
-            return Skip(receiver, changed.IsDirty == 0 ? SkipReason.NoDeltaDifference : SkipReason.None);
-        }
-        
-        public void WriteSystemEntities(NativeArray<Entity> systemEntities, NativeArray<Entity> fromEntities)
-        {
-            var length = systemEntities.Length;
-            Data.Write(ref length);
-            for (var i = 0; i != length; i++)
-                Data.CpyWrite((ushort) fromEntities.IndexOf<Entity, Entity>(systemEntities[i]));
-        }
-
-        public JobWriteSystemEntities WriteSystemEntities(EntityArray systemEntities, NativeArray<Entity> fromEntities)
-        {
-            var length = systemEntities.Length;
-            Data.Write(ref length);
-            // If the data is dynamic and we are gonna do a parallelFor job, we need to have no errors when we set a value to a list.
-            if (Data.IsDynamic == 1)
-                Data.TryResize(Data.Length + length);
-
-            return new JobWriteSystemEntities
-            {
-                Data           = Data,
-                SystemEntities = systemEntities,
-                FromEntities   = fromEntities,
-                Length         = length
-            };
-        }
-    }
-    
-    public struct SnapshotSystemInput
-    {
-        public DataBufferReader Data;
-
-        public SnapshotSystemInput(DataBufferReader data)
-        {
-            Data = data;
-        }
-        
-        public SkipReason GetSkipReason()
-        {
-            return (SkipReason) Data.ReadValue<byte>();
-        }
-        
-        public NativeArray<Entity> ReadSystemEntities(NativeList<Entity> fromEntities, Allocator allocator)
-        {
-            var length = Data.ReadValue<int>();
-            var array  = new NativeArray<Entity>(length, allocator);
-            
-            for (var i = 0; i != length; i++)
-            {
-                var index = Data.ReadValue<ushort>();
-                array[i] = fromEntities[index];
-            }
-
-            return array;
-        }
-        
-        public NativeArray<Entity> ReadSystemEntities(NativeArray<Entity> fromEntities, Allocator allocator)
-        {
-            var length = Data.ReadValue<int>();
-            var array = new NativeArray<Entity>(length, allocator);
-            
-            for (var i = 0; i != length; i++)
-            {
-                var index = Data.ReadValue<ushort>();
-                array[i] = fromEntities[index];
-            }
-
-            return array;
+            return ShouldSkip(receiver, changed.IsDirty == 0 ? SkipReason.NoDeltaDifference : SkipReason.None);
         }
     }
 
-    public struct SnapshotRuntime
+    public struct StSnapshotRuntime
     {
-        public SnapshotData Data;
+        public Allocator Allocator;
 
+        public StSnapshotHeader Header;
+
+        [ReadOnly]
+        public NativeArray<Entity> Entities;
+        [ReadOnly]
         public NativeHashMap<Entity, Entity> SnapshotToWorld;
+        [ReadOnly]
         public NativeHashMap<Entity, Entity> WorldToSnapshot;
         
-        public SnapshotRuntime(SnapshotData data, Allocator allocator)
+        public StSnapshotRuntime(StSnapshotHeader header, StSnapshotRuntime previousRuntime, Allocator wantedAllocator)
         {
-            Data = data;
+            if (previousRuntime.Allocator != wantedAllocator) throw new Exception();
 
+            Allocator = wantedAllocator;
+            Header = header;
+
+            Entities        = default;
+            SnapshotToWorld = previousRuntime.SnapshotToWorld;
+            WorldToSnapshot = previousRuntime.WorldToSnapshot;
+        }
+        
+        public StSnapshotRuntime(StSnapshotHeader header, Allocator allocator)
+        {
+            Allocator = allocator;
+
+            Header = header;
+
+            Entities = default;
             SnapshotToWorld = new NativeHashMap<Entity, Entity>(128, allocator);
             WorldToSnapshot = new NativeHashMap<Entity, Entity>(128, allocator);
         }
@@ -180,49 +88,57 @@ namespace Stormium.Core.Networking
 
         public Entity GetWorldEntityFromGlobal(int index)
         {
-            return EntityToWorld(Data.Entities[index]);
+            return EntityToWorld(Entities[index]);
+        }
+
+        public NativeList<(Entity worldRemoved, Entity snapshotRemoved)> UpdateHashMap()
+        {
+            var list = new NativeList<(Entity worldRemoved, Entity snapshotRemoved)>(SnapshotToWorld.Length, Allocator.Temp);
+            
+            // Remove data from old <Entity>To<Entity> HashMap
+            for (var i = 0; i != Entities.Length; i++)
+            {
+                var entity = Entities[i];
+                if (SnapshotToWorld.TryGetValue(entity, out var worldEntity))
+                    continue;
+                
+                WorldToSnapshot.Remove(worldEntity);
+                SnapshotToWorld.Remove(entity);
+                    
+                list.Add((worldEntity, entity));
+            }
+
+            return list;
+        }
+        
+        public void UpdateHashMapFromLocalData()
+        {
+            SnapshotToWorld.Clear();
+            WorldToSnapshot.Clear();
+            
+            for (var i = 0; i != Entities.Length; i++)
+            {
+                var e = Entities[i];
+                SnapshotToWorld.TryAdd(e, e);
+                WorldToSnapshot.TryAdd(e, e);
+            }
         }
 
         public void Dispose()
         {
+            Entities.Dispose();
             SnapshotToWorld.Dispose();
             WorldToSnapshot.Dispose();
-            
-            Data.Entities.Dispose();
         }
     }
 
-    public struct SnapshotData
+    public struct StSnapshotHeader
     {
-        public SnapshotType SnapshotType;
-        
-        public DataBufferReader Reader;
-        public DataBufferWriter Writer;
+        public GameTime GameTime;
 
-        public int Tick;
-        
-        public NativeArray<Entity> Entities;
-
-        public SnapshotData(NativeArray<Entity> entities, int tick)
+        public StSnapshotHeader(GameTime gameTime)
         {
-            SnapshotType = SnapshotType.Unknown;
-            Reader = default;
-            Writer = default;
-
-            Entities = entities;
-            Tick = tick;
-        }
-
-        public SnapshotData(DataBufferReader reader, NativeArray<Entity> entities, int tick) : this(entities, tick)
-        {
-            SnapshotType = SnapshotType.Read;
-            Reader = reader;
-        }
-
-        public SnapshotData(DataBufferWriter writer, NativeArray<Entity> entities, int tick) : this(entities, tick)
-        {
-            SnapshotType = SnapshotType.Write;
-            Writer = writer;
+            GameTime = gameTime;
         }
     }
 }

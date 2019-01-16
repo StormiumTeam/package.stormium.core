@@ -15,16 +15,8 @@ namespace Stormium.Core.Networking
     {
         public struct State : IStateData, IComponentData
         {
-            public float3     Position;
-            public quaternion Rotation;
-        }
-    }
-    
-    public class SnapshotEntityDataVelocitySystem : SnapshotEntityDataStreamer<SnapshotEntityDataVelocitySystem.State>
-    {
-        public struct State : IStateData, IComponentData
-        {
-            public unsafe fixed double matrix[2];
+            public half3 Position;
+            public half3 Rotation;
         }
     }
 }

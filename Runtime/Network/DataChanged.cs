@@ -23,7 +23,7 @@ namespace Stormium.Core.Networking
         }
     }
 
-    [UpdateAfter(typeof(PostLateUpdate))]
+    [UpdateInGroup(typeof(UpdateLoop.InDataChange))]
     [DisableAutoCreation]
     [UsedImplicitly]
     public class DataChangedSystem<T> : ComponentSystem
