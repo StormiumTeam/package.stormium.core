@@ -1,30 +1,20 @@
-﻿using Unity.Entities;
+﻿using Runtime;
+using StormiumShared.Core.Networking;
+using Unity.Entities;
 
 namespace package.stormium.core.gamemodes
 {
-    /*public interface IGameModeComponent
+    public abstract class GameModeSystem : ComponentSystem
     {
-        
-    }
-    
-    public struct GameModeTag : IComponentData
-    {
-        
-    }
-    
-    public abstract class GameModeManager : ComponentSystem
-    {
-        public abstract Entity CreateInstance();
-        public abstract void RemoveInstance(Entity target);
-        
-        protected override void OnUpdate()
+        public StormiumGameManager GameMgr { get; private set; }
+        public StormiumGameServerManager ServerMgr { get; private set; }
+        public EntityModelManager EntityModelMgr { get; private set; }
+
+        protected override void OnCreateManager()
         {
-            
+            GameMgr = World.GetOrCreateManager<StormiumGameManager>();
+            ServerMgr = World.GetOrCreateManager<StormiumGameServerManager>();
+            EntityModelMgr = World.GetOrCreateManager<EntityModelManager>();
         }
     }
-
-    public abstract class SubGameModeSystem : ComponentSystem
-    {
-        
-    }*/
 }

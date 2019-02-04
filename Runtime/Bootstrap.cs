@@ -3,7 +3,7 @@ using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
 using package.stormiumteam.shared.modding;
 using Scripts;
-using Stormium.Core.Networking;
+using StormiumShared.Core.Networking;
 using Unity.Entities;
 
 namespace Stormium.Core
@@ -20,7 +20,7 @@ namespace Stormium.Core
             KnowPhysicGroups.Initialize(physicSettings);
             
             // Create a local client
-            em.CreateEntity(typeof(ClientTag), typeof(StormiumClient), typeof(SimulateEntity));
+            em.CreateEntity(typeof(ClientTag), typeof(NetworkClient), typeof(SimulateEntity));
             
             // Create a timer
             em.CreateEntity(typeof(GameTimeComponent), typeof(SimulateEntity));
