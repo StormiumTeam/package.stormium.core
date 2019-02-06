@@ -52,10 +52,13 @@ namespace StormiumShared.Core.Networking
                         Entity gamePlayer = default;
                         if (!EntityManager.HasComponent<StNetworkClientToGamePlayer>(clientEntity))
                         {
-                            EntityManager.AddComponent(clientEntity, typeof(StGamePlayerToNetworkClient));
+                            EntityManager.AddComponent(clientEntity, typeof(StNetworkClientToGamePlayer));
 
                             gamePlayer = gameMgr.SpawnLocal(m_GamePlayerModel);
 
+                            if (instanceData.IsLocal())
+                                EntityManager.SetComponentData(gamePlayer, new StGamePlayer(0, true));
+                            
                             EntityManager.AddComponent(gamePlayer, typeof(StGamePlayerToNetworkClient));
                             EntityManager.AddComponent(gamePlayer, typeof(SimulateEntity));
                         }
@@ -66,6 +69,7 @@ namespace StormiumShared.Core.Networking
                             gamePlayer = EntityManager.GetComponentData<StNetworkClientToGamePlayer>(clientEntity).Target;
                         }
 
+                        EntityManager.SetComponentData(clientEntity, new StNetworkClientToGamePlayer(gamePlayer));
                         EntityManager.SetComponentData(gamePlayer, new StGamePlayerToNetworkClient(clientEntity));
                     }
                 }

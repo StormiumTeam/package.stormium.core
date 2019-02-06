@@ -4,7 +4,7 @@ using Unity.Entities;
 
 namespace Runtime
 {
-    public abstract class SystemProvider : ComponentSystem, IModelSpawnEntityCallback, IModelDestroyEntityCallback
+    public abstract class SystemProvider : ComponentSystem
     {
         private EntityModelManager m_ModelManager;
         private ModelIdent m_ModelIdent;
@@ -24,7 +24,7 @@ namespace Runtime
             if (m_ModelManager == null)
             {
                 m_ModelManager = World.GetOrCreateManager<EntityModelManager>();
-                m_ModelIdent = m_ModelManager.Register($"EntityProvider.{GetType().Name}", this, this);
+                m_ModelIdent = m_ModelManager.Register($"EntityProvider.{GetType().Name}", SpawnEntity, DestroyEntity);
             }
 
             return m_ModelManager;

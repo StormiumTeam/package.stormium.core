@@ -43,54 +43,28 @@ namespace Runtime.Data
         }
     }
 
-    public class StGamePlayerStreamer : SnapshotDataStreamerBase
+    public class StGamePlayerStreamer : SnapshotEntityDataManualStreamer<StGamePlayer>
     {
-        private ComponentDataFromEntity<StGamePlayer> m_PlayerArray;
-        private ComponentDataFromEntity<StGamePlayerToNetworkClient> m_PlayerToNClientArray;
-
-        public override void SubscribeSystem()
+        protected override void WriteDataForEntity(int index, Entity entity, ref DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
-            m_PlayerArray = GetComponentDataFromEntity<StGamePlayer>();
-            m_PlayerToNClientArray = GetComponentDataFromEntity<StGamePlayerToNetworkClient>();
+            data.CpyWrite(EntityManager.GetComponentData<StGamePlayer>(entity));
+            if (EntityManager.HasComponent<StGamePlayerToNetworkClient>(entity))
+            {
+                // Is the user owned from the same client? (1 = yes, 0 = no)
+                data.CpyWrite(EntityManager.GetComponentData<StGamePlayerToNetworkClient>(entity).Target == receiver.Client ? (byte) 1 : (byte) 0);
+            }
+            else
+            {
+                data.CpyWrite((byte) 0);
+            }
         }
 
-        public override DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle)
+        protected override void ReadDataForEntity(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
         {
-            GetDataAndEntityLength(runtime, out var data, out var length);
+            var player = data.ReadValue<StGamePlayer>();
+            player.IsSelf = data.ReadValue<byte>();
 
-            for (var i = 0; i != length; i++)
-            {
-                var entity = runtime.Entities[i].Source;
-                if (!m_PlayerArray.Exists(entity))
-                    continue;
-
-                data.CpyWrite(m_PlayerArray[entity]);
-
-                if (m_PlayerToNClientArray.Exists(entity))
-                    // Is the user owned from the same client? (1 = yes, 0 = no)
-                    data.CpyWrite(m_PlayerToNClientArray[entity].Target == receiver.Client ? (byte) 1 : (byte) 0);
-                else
-                    data.CpyWrite((byte) 0);
-            }
-
-            return data;
-        }
-
-        public override void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle)
-        {
-            GetEntityLength(runtime, out var length);
-
-            for (var i = 0; i != length; i++)
-            {
-                var entity = runtime.GetWorldEntityFromGlobal(i);
-                if (!m_PlayerArray.Exists(entity))
-                    continue;
-
-                var state = sysData.ReadValue<StGamePlayer>();
-                state.IsSelf = sysData.ReadValue<byte>();
-
-                m_PlayerArray[entity] = state;
-            }
+            EntityManager.SetComponentData(entity, player);
         }
     }
 

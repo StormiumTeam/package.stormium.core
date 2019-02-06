@@ -136,11 +136,13 @@ namespace StormiumShared.Core.Networking
     public struct StSnapshotHeader
     {
         public GameTime GameTime;
+        public int SnapshotIdx;
         public SnapshotSender Sender;
 
-        public StSnapshotHeader(GameTime gameTime, SnapshotSender sender)
+        public StSnapshotHeader(GameTime gameTime, int snapshotIdx, SnapshotSender sender)
         {
             GameTime = gameTime;
+            SnapshotIdx = snapshotIdx;
             Sender = sender;
         }
     }

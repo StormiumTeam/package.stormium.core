@@ -32,7 +32,7 @@ namespace Runtime
             );
 
             m_EntityModelManager = World.GetOrCreateManager<EntityModelManager>();
-            m_ServerMgr = World.GetOrCreateManager<StormiumGameServerManager>();
+            m_ServerManager = World.GetOrCreateManager<StormiumGameServerManager>();
         }
 
         protected override void OnUpdate()

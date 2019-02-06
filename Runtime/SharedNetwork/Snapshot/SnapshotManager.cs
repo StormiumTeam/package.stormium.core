@@ -87,6 +87,7 @@ namespace StormiumShared.Core.Networking
                                                     Entity                receiverClient,
                                                     NativeArray<Entity>   nfEntities,
                                                     bool                  fullSnapshot,
+                                                    int snapshotIdx,
                                                     GameTime              gameTime,
                                                     Allocator             allocator,
                                                     ref DataBufferWriter  data,
@@ -96,7 +97,7 @@ namespace StormiumShared.Core.Networking
             var sender = new SnapshotSender(senderClient, SnapshotFlags.Local);
             var receiver = new SnapshotReceiver(receiverClient, fullSnapshot ? SnapshotFlags.FullData : SnapshotFlags.None);
 
-            return GenerateSnapshot(sender, receiver, gameTime, entities, allocator, ref data, ref previousRuntime);
+            return GenerateSnapshot(snapshotIdx, sender, receiver, gameTime, entities, allocator, ref data, ref previousRuntime);
         }
 
         private unsafe void WriteFullEntities(ref DataBufferWriter data, ref NativeArray<SnapshotEntityInformation> entities)
@@ -176,7 +177,8 @@ namespace StormiumShared.Core.Networking
             }*/
         }
 
-        public unsafe GenerateResult GenerateSnapshot(SnapshotSender                         sender,
+        public unsafe GenerateResult GenerateSnapshot(int                                    snapshotIdx,
+                                                      SnapshotSender                         sender,
                                                       SnapshotReceiver                       receiver,
                                                       GameTime                               gt,
                                                       NativeArray<SnapshotEntityInformation> entities,
@@ -185,7 +187,7 @@ namespace StormiumShared.Core.Networking
                                                       ref StSnapshotRuntime                  runtime)
         {
             IntPtr previousEntityArrayPtr = default;
-            var    header                 = new StSnapshotHeader(gt, sender);
+            var    header                 = new StSnapshotHeader(gt, snapshotIdx, sender);
 
             runtime.Header = header;
             if (!runtime.Entities.IsCreated)
@@ -196,6 +198,7 @@ namespace StormiumShared.Core.Networking
             runtime.UpdateHashMapFromLocalData();
 
             // Write Game time
+            data.Write(ref header.SnapshotIdx);
             data.Write(ref gt);
 
             // Write entity data
@@ -294,9 +297,10 @@ namespace StormiumShared.Core.Networking
             // --------------------------------------------------------------------------- //
             // Actual code
             // --------------------------------------------------------------------------- //
+            var snapshotIdx = data.ReadValue<int>();
             var gameTime = data.ReadValue<GameTime>();
 
-            var header  = new StSnapshotHeader(gameTime, sender);
+            var header  = new StSnapshotHeader(gameTime, snapshotIdx, sender);
             var runtime = new StSnapshotRuntime(header, previousRuntime, allocator);
 
             // Read Entity Data
