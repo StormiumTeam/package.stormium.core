@@ -266,27 +266,27 @@ namespace Stormium.Core.Networking
 
                     sw.Start();
                     
-                    var data = new DataBufferWriter(Allocator.TempJob);
+                    var data = new DataBufferWriter(0, Allocator.TempJob);
 
-                    data.CpyWrite(MessageType.MessagePattern);
-                    data.CpyWrite(m_SnapshotPattern.Id);
+                    data.WriteValue(MessageType.MessagePattern);
+                    data.WriteValue<int>(m_SnapshotPattern.Id);
 
-                    var genData = new DataBufferWriter(Allocator.Persistent);
+                    var genData = new DataBufferWriter(0, Allocator.Persistent);
                     var generation = snapshotMgr.GenerateForConnection(localClient, clientEntity, entities, true, m_SnapshotCount++, gameTime, Allocator.Persistent, ref genData, ref clientRuntime);
 
                     // Write the length of uncompressed data.
-                    data.CpyWrite(generation.Data.Length);
+                    data.WriteValue<int>(generation.Data.Length);
 
                     var isCompressed = generation.Data.Length > 96;
                     
                     // Write an information about if the data is compressed or not
-                    data.Write(ref isCompressed);
+                    data.WriteRef(ref isCompressed);
 
                     var compressedLength = 0;
                     // If it should not be compressed, we write the data directly
                     if (!isCompressed)
                     {
-                        data.WriteStatic(generation.Data);
+                        data.WriteBuffer(generation.Data);
                     }
                     // If it is, we compress the data
                     else

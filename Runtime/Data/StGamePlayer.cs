@@ -47,15 +47,15 @@ namespace Runtime.Data
     {
         protected override void WriteDataForEntity(int index, Entity entity, ref DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
-            data.CpyWrite(EntityManager.GetComponentData<StGamePlayer>(entity));
+            data.WriteValue(EntityManager.GetComponentData<StGamePlayer>(entity));
             if (EntityManager.HasComponent<StGamePlayerToNetworkClient>(entity))
             {
                 // Is the user owned from the same client? (1 = yes, 0 = no)
-                data.CpyWrite(EntityManager.GetComponentData<StGamePlayerToNetworkClient>(entity).Target == receiver.Client ? (byte) 1 : (byte) 0);
+                data.WriteByte(EntityManager.GetComponentData<StGamePlayerToNetworkClient>(entity).Target == receiver.Client ? (byte) 1 : (byte) 0);
             }
             else
             {
-                data.CpyWrite((byte) 0);
+                data.WriteByte(0);
             }
         }
 

@@ -48,7 +48,7 @@ namespace StormiumShared.Core.Networking
         protected void GetDataAndEntityLength(StSnapshotRuntime runtime, out DataBufferWriter data, out int entityLength, int desiredDataLength = 0)
         {
             entityLength = runtime.Entities.Length;
-            data = new DataBufferWriter(Allocator.TempJob, math.max(desiredDataLength, entityLength * sizeof(Entity)));
+            data = new DataBufferWriter(math.max(desiredDataLength, 1024 + entityLength * 4 * sizeof(Entity)), Allocator.TempJob);
         }
 
         protected void GetEntityLength(StSnapshotRuntime runtime, out int entityLength)

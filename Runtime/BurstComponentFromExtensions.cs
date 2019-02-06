@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -22,21 +23,13 @@ namespace Stormium.Core
             }
         }
 
-        public static bool CallExists<T>(this ComponentDataFromEntity<T> dataFromEntity, CallExistsAsBurst call, Entity entity)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool CallExists<T>(this ref ComponentDataFromEntity<T> dataFromEntity, CallExistsAsBurst call, Entity entity)
             where T : struct, IComponentData
         {
-            return call(UnsafeUtility.AddressOf(ref dataFromEntity), entity);
+            return call(Unsafe.AsPointer(ref dataFromEntity), entity);
         }
 
         public delegate bool CallExistsAsBurst(void* data, Entity entity);
-    }
-
-    public static class BurstComponentFromExtensions
-    {
-        public static Func<ComponentDataFromEntity<T>, Entity, bool> GetExistsCall<T>()
-            where T : struct, IComponentData
-        {
-            return BurstCompiler.CompileDelegate(new Func<ComponentDataFromEntity<T>, Entity, bool>((f, e) => f.Exists(e)));
-        }
     }
 }

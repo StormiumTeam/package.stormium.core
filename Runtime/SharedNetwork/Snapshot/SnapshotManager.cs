@@ -102,8 +102,8 @@ namespace StormiumShared.Core.Networking
 
         private unsafe void WriteFullEntities(ref DataBufferWriter data, ref NativeArray<SnapshotEntityInformation> entities)
         {
-            data.Write((byte) 0);
-            data.WriteDynInteger((ulong) entities.Length);
+            data.WriteByte((byte) 0);
+            data.WriteDynamicInt((ulong) entities.Length);
             if (entities.Length > 0) data.WriteDataSafe((byte*) entities.GetUnsafePtr(), entities.Length * sizeof(SnapshotEntityInformation), default);
         }
 
@@ -198,8 +198,8 @@ namespace StormiumShared.Core.Networking
             runtime.UpdateHashMapFromLocalData();
 
             // Write Game time
-            data.Write(ref header.SnapshotIdx);
-            data.Write(ref gt);
+            data.WriteRef(ref header.SnapshotIdx);
+            data.WriteRef(ref gt);
 
             // Write entity data
             if ((receiver.Flags & SnapshotFlags.FullData) != 0)
@@ -221,7 +221,7 @@ namespace StormiumShared.Core.Networking
                 obj.SubscribeSystem();
 
             var systemsMfc = AppEvent<ISnapshotManageForClient>.GetObjEvents();
-            data.Write(systemsMfc.Length);
+            data.WriteInt(systemsMfc.Length);
 
             // Write additional components type from entities
             /*foreach (var entity in runtime.Entities)
@@ -248,8 +248,11 @@ namespace StormiumShared.Core.Networking
                 JobHandle uselessHandle = default;
 
                 var pattern = obj.GetSystemPattern();
+                Profiler.BeginSample($"System #{pattern.Id} ({pattern.InternalIdent.Name})");
+                Profiler.BeginSample("WriteData");
                 var sysData = obj.WriteData(receiver, runtime, ref uselessHandle);
-
+                Profiler.EndSample();
+                
                 uselessHandle.Complete();
 
                 // We need the latest reference from the buffer data
@@ -257,10 +260,11 @@ namespace StormiumShared.Core.Networking
                 sysData.UpdateReference();
 
                 // Used for skipping data when reading
-                data.WriteDynInteger((ulong) pattern.Id);
-                data.WriteDynInteger((ulong) sysData.Length);
-                data.WriteStatic(sysData);
+                data.WriteDynamicInt((ulong) pattern.Id);
+                data.WriteDynamicInt((ulong) sysData.Length);
+                data.WriteBuffer(sysData);
                 sysData.Dispose();
+                Profiler.EndSample();
             }
 
             return new GenerateResult {Data = data, Runtime = runtime};
