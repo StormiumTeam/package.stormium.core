@@ -45,7 +45,7 @@ namespace Runtime.Data
 
     public class StGamePlayerStreamer : SnapshotEntityDataManualStreamer<StGamePlayer>
     {
-        protected override void WriteDataForEntity(int index, Entity entity, ref DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+        protected override void WriteDataForEntity(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
             data.WriteValue(EntityManager.GetComponentData<StGamePlayer>(entity));
             if (EntityManager.HasComponent<StGamePlayerToNetworkClient>(entity))

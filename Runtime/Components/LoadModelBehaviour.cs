@@ -12,7 +12,7 @@ namespace Runtime
         
         private void OnEnable()
         {
-            Asset.Instantiate<GameObject>(Vector3.zero, Quaternion.identity, SpawnRoot).Completed += (o) => m_Result = o.Result;
+            Asset.Instantiate(Vector3.zero, Quaternion.identity, SpawnRoot).Completed += (o) => m_Result = o.Result;
         }
 
         private void OnDisable()

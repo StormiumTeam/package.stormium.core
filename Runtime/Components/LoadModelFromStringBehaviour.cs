@@ -38,7 +38,7 @@ namespace Runtime
         {
             Depop();
             
-            Addressables.Instantiate<GameObject>(m_AssetId, SpawnRoot).Completed += (o) => m_Result = o.Result;
+            Addressables.Instantiate(m_AssetId, SpawnRoot).Completed += (o) => m_Result = o.Result;
         }
 
         private void Depop()
