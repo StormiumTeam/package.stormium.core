@@ -12,6 +12,7 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using UnityEngine;
+using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
 
 namespace Stormium.Core.Networking
@@ -160,6 +161,7 @@ namespace Stormium.Core.Networking
 
                     var exchange  = netPatternSystem.GetLocalExchange(ev.Invoker.Id);
                     var patternId = reader.ReadValue<int>();
+                    Debug.Log($"Check {patternId}");
                     if (m_SnapshotPattern != exchange.GetOriginId(patternId))
                         continue;
 
@@ -272,8 +274,10 @@ namespace Stormium.Core.Networking
                     data.WriteValue<int>(m_SnapshotPattern.Id);
 
                     var genData = new DataBufferWriter(0, Allocator.Persistent);
+                    Profiler.BeginSample("Generation for " + localClient);
                     var generation = snapshotMgr.GenerateForConnection(localClient, clientEntity, entities, true, m_SnapshotCount++, gameTime, Allocator.Persistent, ref genData, ref clientRuntime);
-
+                    Profiler.EndSample();
+                    
                     // Write the length of uncompressed data.
                     data.WriteValue<int>(generation.Data.Length);
 

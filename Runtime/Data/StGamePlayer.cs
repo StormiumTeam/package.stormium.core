@@ -4,11 +4,49 @@ using StormiumShared.Core.Networking;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
 
 namespace Runtime.Data
 {
     public struct StGamePlayer : IComponentData
     {
+        public struct StreamerPayload : IMultiEntityDataPayload
+        {
+            public ComponentDataFromEntity<StGamePlayer> States;
+            public ComponentDataFromEntity<StGamePlayerToNetworkClient> ToNetworkClients;
+
+            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+            {
+                data.WriteValue(States[entity]);
+                if (ToNetworkClients.Exists(entity))
+                {
+                    // Is the user owned from the same client? (1 = yes, 0 = no)
+                    data.WriteByte((byte) math.select(0, 1, ToNetworkClients[entity].Target == receiver.Client));
+                }
+                else
+                {
+                    data.WriteByte(0);
+                }
+            }
+
+            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+            {
+                var player = data.ReadValue<StGamePlayer>();
+                player.IsSelf = data.ReadValue<byte>();
+
+                States[entity] = player;
+            }
+        }
+        
+        public class Streamer : SnapshotEntityDataManualStreamer<StGamePlayer, StreamerPayload>
+        {
+            protected override void UpdatePayload(ref StreamerPayload current)
+            {
+                current.States = States;
+                current.ToNetworkClients = GetComponentDataFromEntity<StGamePlayerToNetworkClient>();
+            }
+        }
+
         public ulong MasterServerId;
         public byte  IsSelf;
 
@@ -40,31 +78,6 @@ namespace Runtime.Data
         public StNetworkClientToGamePlayer(Entity target)
         {
             Target = target;
-        }
-    }
-
-    public class StGamePlayerStreamer : SnapshotEntityDataManualStreamer<StGamePlayer>
-    {
-        protected override void WriteDataForEntity(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
-        {
-            data.WriteValue(EntityManager.GetComponentData<StGamePlayer>(entity));
-            if (EntityManager.HasComponent<StGamePlayerToNetworkClient>(entity))
-            {
-                // Is the user owned from the same client? (1 = yes, 0 = no)
-                data.WriteByte(EntityManager.GetComponentData<StGamePlayerToNetworkClient>(entity).Target == receiver.Client ? (byte) 1 : (byte) 0);
-            }
-            else
-            {
-                data.WriteByte(0);
-            }
-        }
-
-        protected override void ReadDataForEntity(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
-        {
-            var player = data.ReadValue<StGamePlayer>();
-            player.IsSelf = data.ReadValue<byte>();
-
-            EntityManager.SetComponentData(entity, player);
         }
     }
 

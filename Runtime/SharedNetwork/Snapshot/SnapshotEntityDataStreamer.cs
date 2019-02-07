@@ -1,19 +1,12 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using ICSharpCode.NRefactory.Ast;
-using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.lowlevel;
-using package.stormiumteam.shared;
 using Stormium.Core;
 using Unity.Burst;
-using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Transforms;
-using UnityEngine;
 using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
 
@@ -182,7 +175,7 @@ namespace StormiumShared.Core.Networking
             m_WriteDataBurst = StreamerBurst.CreateCall<TState>.WriteData();
         }
 
-        public override DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle)
+        public override DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
             Profiler.BeginSample("Init Variables");
             GetDataAndEntityLength(runtime, out var buffer, out var entityLength);
@@ -194,7 +187,7 @@ namespace StormiumShared.Core.Networking
             return buffer;
         }
 
-        public override void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle)
+        public override void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData)
         {
             GetEntityLength(runtime, out var length);
             UpdateComponentDataFromEntity();
@@ -246,8 +239,9 @@ namespace StormiumShared.Core.Networking
             public StSnapshotRuntime Runtime;
         }
 
-        public struct WriteDataPayload<T>
+        public struct WriteDataPayload<T, Tw>
             where T : struct, IComponentData
+            where Tw : struct, IWriteEntityDataPayload
         {
             public DataBufferWriter                        Buffer;
             public SnapshotReceiver                        Receiver;
@@ -255,10 +249,13 @@ namespace StormiumShared.Core.Networking
             public int                                     EntityLength;
             public ComponentDataFromEntity<T>              States;
             public ComponentDataFromEntity<DataChanged<T>> Changes;
-            public FunctionPointer<wdfe>                   FunctionWriteDataForEntity;
+            public FunctionPointer<WriteDataForEntityToBurst> WriteFunction;
+            public Tw CustomWritePayload;
         }
 
-        public static class CreateCall<T> where T : struct, IComponentData
+        public static class CreateCall<T, Tw, Tr> where T : struct, IComponentData
+                                                  where Tw : struct, IWriteEntityDataPayload
+                                                  where Tr : struct, IReadEntityDataPayload
         {
             public static CallWriteDataAsBurst WriteData()
             {
@@ -267,7 +264,7 @@ namespace StormiumShared.Core.Networking
 
             private static void InternalWriteData(void* payloadPtr)
             {
-                UnsafeUtility.CopyPtrToStructure(payloadPtr, out WriteDataPayload<T> payload);
+                UnsafeUtility.CopyPtrToStructure(payloadPtr, out WriteDataPayload<T, Tw> payload);
 
                 ref var entityLength = ref payload.EntityLength;
                 ref var buffer       = ref payload.Buffer;
@@ -306,27 +303,30 @@ namespace StormiumShared.Core.Networking
                         Runtime  = runtime
                     };
 
-                    payload.FunctionWriteDataForEntity.Invoke(UnsafeUtility.AddressOf(ref wdfePayload));
+                    payload.WriteFunction.Invoke(UnsafeUtility.AddressOf(ref wdfePayload), UnsafeUtility.AddressOf(ref payload.CustomWritePayload));
                 }
             }
         }
 
-        public static void CallWriteData<T>(CallWriteDataAsBurst                    call,
+        public static void CallWriteData<T, Tw>(CallWriteDataAsBurst                    call,
                                             DataBufferWriter                        buffer, SnapshotReceiver receiver, StSnapshotRuntime runtime, int entityLength,
                                             ComponentDataFromEntity<T>              states,
                                             ComponentDataFromEntity<DataChanged<T>> changes,
-                                            FunctionPointer<wdfe>                   functionWriteDataForEntity)
+                                            FunctionPointer<WriteDataForEntityToBurst> writeFunction,
+                                            Tw customWritePayload)
             where T : struct, IComponentData
+            where Tw : struct, IWriteEntityDataPayload
         {
-            var payload = new WriteDataPayload<T>
+            var payload = new WriteDataPayload<T, Tw>
             {
-                Buffer                     = buffer,
-                Receiver                   = receiver,
-                Runtime                    = runtime,
-                EntityLength               = entityLength,
-                States                     = states,
-                Changes                    = changes,
-                FunctionWriteDataForEntity = functionWriteDataForEntity
+                Buffer        = buffer,
+                Receiver      = receiver,
+                Runtime       = runtime,
+                EntityLength  = entityLength,
+                States        = states,
+                Changes       = changes,
+                WriteFunction = writeFunction,
+                CustomWritePayload = customWritePayload
             };
 
             call(UnsafeUtility.AddressOf(ref payload));
@@ -335,107 +335,111 @@ namespace StormiumShared.Core.Networking
         public delegate void CallWriteDataAsBurst(void* payload);
 
         public delegate void wdfe(void* payload);
-        internal delegate void WriteDataForEntityToBurst(void* payload, void* custom);
+        public delegate void WriteDataForEntityToBurst(void* payload, void* custom);
     }
 
-    public interface IEntityDataPayload
+    public interface IWriteEntityDataPayload
     {
         void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime);
     }
 
-    public abstract unsafe class SnapshotEntityDataManualStreamer<TState, TWriteEntityPayload> : SnapshotEntityDataStreamerBase<TState>
-        where TState : struct, IComponentData
-        where TWriteEntityPayload : struct, IEntityDataPayload
+    public interface IReadEntityDataPayload
     {
-        private static SnapshotEntityDataManualStreamer<TState, TWriteEntityPayload> m_CurrentStreamer;
-        private TWriteEntityPayload m_CurrentPayload;
+        void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime);
+    }
+    
+    public interface IMultiEntityDataPayload : IWriteEntityDataPayload, IReadEntityDataPayload
+    {}
 
-        protected abstract void WriteDataForEntity(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime);
-        protected abstract void UpdatePayload(ref TWriteEntityPayload current);
+    public abstract class SnapshotEntityDataManualStreamer<TState, TMultiEntityPayload> : SnapshotEntityDataManualStreamer<TState, TMultiEntityPayload, TMultiEntityPayload>
+        where TState : struct, IComponentData
+        where TMultiEntityPayload : struct, IMultiEntityDataPayload
+    {
+        protected abstract void UpdatePayload(ref TMultiEntityPayload current);
+        
+        protected override void UpdatePayloadR(ref TMultiEntityPayload current)
+        {
+            UpdatePayload(ref current);
+        }
 
-        protected abstract void ReadDataForEntity(int  index, Entity entity, ref DataBufferReader data, SnapshotSender   sender,   StSnapshotRuntime runtime);
+        protected override void UpdatePayloadW(ref TMultiEntityPayload current)
+        {
+            UpdatePayload(ref current);
+        }
+    }
+    
+    public abstract unsafe class SnapshotEntityDataManualStreamer<TState, TWriteEntityPayload, TReadEntityPayload> : SnapshotEntityDataStreamerBase<TState>
+        where TState : struct, IComponentData
+        where TWriteEntityPayload : struct, IWriteEntityDataPayload
+        where TReadEntityPayload : struct, IReadEntityDataPayload
+    {
+        internal static SnapshotEntityDataManualStreamer<TState, TWriteEntityPayload, TReadEntityPayload> m_CurrentStreamer;
+        internal static IntPtr m_WriteDataForEntityOptimizedPtr;
+        
+        internal FunctionPointer<ManualStreamerBurst.wdfe> m_FunctionPointerWriteDataForEntity;
+        
+        internal TWriteEntityPayload m_CurrentWritePayload;
+        internal TReadEntityPayload m_CurrentReadPayload;
+
+        protected abstract void UpdatePayloadW(ref TWriteEntityPayload current);
+        protected abstract void UpdatePayloadR(ref TReadEntityPayload current);
 
         private ManualStreamerBurst.CallWriteDataAsBurst m_WriteDataBurst;
-
-        private FunctionPointer<ManualStreamerBurst.wdfe> m_FunctionPointerWriteDataForEntity;
-
-        private IntPtr m_WriteDataForEntityOptimizedPtr;
 
         protected override unsafe void OnCreateManager()
         {
             base.OnCreateManager();
 
-            m_WriteDataBurst = ManualStreamerBurst.CreateCall<TState>.WriteData();
-
-            m_FunctionPointerWriteDataForEntity = new FunctionPointer<ManualStreamerBurst.wdfe>
-            (
-                Marshal.GetFunctionPointerForDelegate(new Action<IntPtr>(ptr =>
-                {
-                    var writeDataForEntity = new FunctionPointer<ManualStreamerBurst.WriteDataForEntityToBurst>(m_CurrentStreamer.m_WriteDataForEntityOptimizedPtr);
-                    writeDataForEntity.Invoke((void*) ptr, UnsafeUtility.AddressOf(ref m_CurrentStreamer.m_CurrentPayload));
-                }))
-            );
-
-            ManualStreamerBurst.WriteDataForEntityToBurst optimizedWriteDataForEntity = (payloadPtr, customPtr) =>
-            {
-                UnsafeUtility.CopyPtrToStructure(payloadPtr, out ManualStreamerBurst.WriteDataForEntityPayload payload);
-                UnsafeUtility.CopyPtrToStructure(customPtr, out TWriteEntityPayload custom);
-
-                custom.Write(payload.Index, payload.Entity, payload.Data, payload.Receiver, payload.Runtime);
-            };
-
             try
             {
-                m_WriteDataForEntityOptimizedPtr = Marshal.GetFunctionPointerForDelegate(BurstCompiler.CompileDelegate(optimizedWriteDataForEntity));
+                m_WriteDataForEntityOptimizedPtr = Marshal.GetFunctionPointerForDelegate(BurstCompiler.CompileDelegate((ManualStreamerBurst.WriteDataForEntityToBurst) OptimizedWriteDataForEntity));
             }
             catch (Exception e)
             {
                 Debug.LogError($"Couldn't burst {typeof(TWriteEntityPayload).FullName}.\n Exception Message:\n{e.Message}");
-                throw;
+                m_WriteDataForEntityOptimizedPtr = Marshal.GetFunctionPointerForDelegate((ManualStreamerBurst.WriteDataForEntityToBurst) OptimizedWriteDataForEntity);
             }
+            
+            m_WriteDataBurst = ManualStreamerBurst.CreateCall<TState, TWriteEntityPayload, TReadEntityPayload>.WriteData();
+            
+            /*m_FunctionPointerWriteDataForEntity = new FunctionPointer<ManualStreamerBurst.wdfe>
+            (
+                Marshal.GetFunctionPointerForDelegate(new Action<IntPtr>(ptr =>
+                {
+                    var writeDataForEntity = new FunctionPointer<ManualStreamerBurst.WriteDataForEntityToBurst>(m_CurrentStreamer.m_WriteDataForEntityOptimizedPtr);
+                    writeDataForEntity.Invoke((void*) ptr, UnsafeUtility.AddressOf(ref m_CurrentStreamer.m_CurrentWritePayload));
+                }))
+            );*/
         }
 
-        public override DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle)
+        private static void OptimizedWriteDataForEntity(void* payloadPtr, void* customPtr)
+        {
+            UnsafeUtility.CopyPtrToStructure(payloadPtr, out ManualStreamerBurst.WriteDataForEntityPayload payload);
+            UnsafeUtility.CopyPtrToStructure(customPtr, out TWriteEntityPayload custom);
+
+            custom.Write(payload.Index, payload.Entity, payload.Data, payload.Receiver, payload.Runtime);
+        }
+
+        public override DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime)
         {
             GetDataAndEntityLength(runtime, out var buffer, out var entityLength);
             UpdateComponentDataFromEntity();
 
             m_CurrentStreamer = this;
-            UpdatePayload(ref m_CurrentPayload);
+            UpdatePayloadW(ref m_CurrentWritePayload);
 
-            ManualStreamerBurst.CallWriteData(m_WriteDataBurst, buffer, receiver, runtime, entityLength, States, Changed, m_FunctionPointerWriteDataForEntity);
-
-            /*for (var i = 0; i != entityLength; i++)
-            {
-                var entity = runtime.Entities[i].Source;
-                if (!StateExists(entity))
-                {
-                    buffer.WriteValue(StreamerSkipReason.NoComponent);
-                    continue;
-                }
-
-                var change = new DataChanged<TState> {IsDirty = 1};
-                if (ChangedStateExists(entity))
-                    change = EntityManager.GetComponentData<DataChanged<TState>>(entity);
-
-                if (SnapshotOutputUtils.ShouldSkip(receiver, change))
-                {
-                    buffer.WriteValue(StreamerSkipReason.Delta);
-                    continue;
-                }
-
-                buffer.WriteValue(StreamerSkipReason.NoSkip);
-                WriteDataForEntity(i, entity, ref buffer, receiver, runtime);
-            }*/
+            var writeFunction = new FunctionPointer<ManualStreamerBurst.WriteDataForEntityToBurst>(m_WriteDataForEntityOptimizedPtr);
+            
+            ManualStreamerBurst.CallWriteData(m_WriteDataBurst, buffer, receiver, runtime, entityLength, States, Changed, writeFunction, m_CurrentWritePayload);
 
             return buffer;
         }
 
-        public override void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle)
+        public override void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData)
         {
             GetEntityLength(runtime, out var length);
             UpdateComponentDataFromEntity();
-            UpdatePayload(ref m_CurrentPayload);
+            UpdatePayloadR(ref m_CurrentReadPayload);
 
             for (var index = 0; index != length; index++)
             {
@@ -467,7 +471,7 @@ namespace StormiumShared.Core.Networking
                     UpdateComponentDataFromEntity();
                 }
 
-                ReadDataForEntity(index, worldEntity, ref sysData, sender, runtime);
+                m_CurrentReadPayload.Read(index, worldEntity, ref sysData, sender, runtime);
             }
         }
     }

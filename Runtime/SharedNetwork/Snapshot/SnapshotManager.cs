@@ -198,10 +198,13 @@ namespace StormiumShared.Core.Networking
             runtime.UpdateHashMapFromLocalData();
 
             // Write Game time
+            Profiler.BeginSample("Write Header");
             data.WriteRef(ref header.SnapshotIdx);
             data.WriteRef(ref gt);
+            Profiler.EndSample();
 
             // Write entity data
+            Profiler.BeginSample("Write Entities");
             if ((receiver.Flags & SnapshotFlags.FullData) != 0)
             {
                 WriteFullEntities(ref data, ref entities);
@@ -216,53 +219,35 @@ namespace StormiumShared.Core.Networking
                 runtime.Entities.Dispose();
                 runtime.Entities = entities;
             }
+            Profiler.EndSample();
 
+            Profiler.BeginSample("SubscribeSystem()");
             foreach (var obj in AppEvent<ISnapshotSubscribe>.GetObjEvents())
                 obj.SubscribeSystem();
+            Profiler.EndSample();
 
             var systemsMfc = AppEvent<ISnapshotManageForClient>.GetObjEvents();
             data.WriteInt(systemsMfc.Length);
 
-            // Write additional components type from entities
-            /*foreach (var entity in runtime.Entities)
-            {
-                if (!EntityManager.HasComponent<AdditionalComponent>(entity.Source))
-                    continue;
-
-                var b = EntityManager.GetBuffer<AdditionalComponent>(entity.Source);
-                if (b.Length >= byte.MaxValue)
-                    throw new InvalidOperationException();
-                
-                data.Write((byte) b.Length);
-                for (var i = 0; i != b.Length; i++)
-                {
-                    data.Write(b[i].TypeIndex);
-                }
-            }*/
-
             // Write system data
             foreach (var obj in systemsMfc)
             {
-                //Debug.Log("Writing " + obj.GetSystemPattern().InternalIdent.Name);
-
-                JobHandle uselessHandle = default;
-
                 var pattern = obj.GetSystemPattern();
                 Profiler.BeginSample($"System #{pattern.Id} ({pattern.InternalIdent.Name})");
                 Profiler.BeginSample("WriteData");
-                var sysData = obj.WriteData(receiver, runtime, ref uselessHandle);
+                var sysData = obj.WriteData(receiver, runtime);
                 Profiler.EndSample();
-                
-                uselessHandle.Complete();
 
                 // We need the latest reference from the buffer data
                 // If the buffer get resized, the pointer to the buffer is invalid.
                 sysData.UpdateReference();
 
                 // Used for skipping data when reading
+                Profiler.BeginSample("Other...");
                 data.WriteDynamicInt((ulong) pattern.Id);
                 data.WriteDynamicInt((ulong) sysData.Length);
                 data.WriteBuffer(sysData);
+                Profiler.EndSample();
                 sysData.Dispose();
                 Profiler.EndSample();
             }
@@ -345,16 +330,11 @@ namespace StormiumShared.Core.Networking
             var systemLength = data.ReadValue<int>();
             for (var i = 0; i != systemLength; i++)
             {
-                JobHandle uselessHandle = default;
-
                 var foreignSystemPattern = (int) data.ReadDynInteger();
                 var length               = (int) data.ReadDynInteger();
-
                 var system        = GetSystem(exchange.GetOriginId(foreignSystemPattern));
 
-                //Debug.Log($"Reading {system.GetSystemPattern().InternalIdent.Name}");
-
-                system.ReadData(sender, runtime, new DataBufferReader(data, data.CurrReadIndex, data.CurrReadIndex + length), ref uselessHandle);
+                system.ReadData(sender, runtime, new DataBufferReader(data, data.CurrReadIndex, data.CurrReadIndex + length));
 
                 data.CurrReadIndex += length;
             }

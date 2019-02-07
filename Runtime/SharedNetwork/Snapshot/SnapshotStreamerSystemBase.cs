@@ -26,10 +26,21 @@ namespace StormiumShared.Core.Networking
         
         protected override void OnCreateManager()
         {
+            var className = string.Empty;
+            Type outerType = GetType().DeclaringType;
+            while (outerType != null)
+            {
+                className += outerType.Name + ".";
+                
+                outerType = outerType.DeclaringType;
+            }
+
+            className += GetType().Name;
+            
             World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
             PatternResult = World.GetOrCreateManager<NetPatternSystem>()
                         .GetLocalBank()
-                        .Register(new PatternIdent($"auto." + GetType().Namespace + "." + GetType().Name));
+                        .Register(new PatternIdent($"auto." + GetType().Namespace + "." + className));
         }
 
         public PatternResult GetSystemPattern()
@@ -41,9 +52,9 @@ namespace StormiumShared.Core.Networking
         {
         }
 
-        public abstract DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime, ref JobHandle jobHandle);
+        public abstract DataBufferWriter WriteData(SnapshotReceiver receiver, StSnapshotRuntime runtime);
 
-        public abstract void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData, ref JobHandle jobHandle);
+        public abstract void ReadData(SnapshotSender sender, StSnapshotRuntime runtime, DataBufferReader sysData);
 
         protected void GetDataAndEntityLength(StSnapshotRuntime runtime, out DataBufferWriter data, out int entityLength, int desiredDataLength = 0)
         {
