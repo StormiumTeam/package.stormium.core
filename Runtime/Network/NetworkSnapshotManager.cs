@@ -7,6 +7,7 @@ using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
 using Runtime;
+using StormiumShared.Core;
 using StormiumShared.Core.Networking;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;

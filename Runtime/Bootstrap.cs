@@ -3,6 +3,7 @@ using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
 using package.stormiumteam.shared.modding;
 using Scripts;
+using StormiumShared.Core;
 using StormiumShared.Core.Networking;
 using Unity.Entities;
 
