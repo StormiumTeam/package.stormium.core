@@ -39,7 +39,7 @@ namespace StormiumShared.Core.Networking
         {
         }
 
-        [BurstCompile]
+        //[BurstCompile]
         struct TransformEntityArrayJob : IJobParallelFor
         {
             public NativeArray<Entity> EntityArray;
@@ -59,13 +59,34 @@ namespace StormiumShared.Core.Networking
             var entityLength = entityArray.Length;
             var entities     = new NativeArray<SnapshotEntityInformation>(entityLength, allocator);
             
-            new TransformEntityArrayJob
+            /*new TransformEntityArrayJob
             {
                 EntityArray = entityArray,
                 Entities    = entities,
                 
                 Component = GetComponentDataFromEntity<ModelIdent>()
-            }.Run(entityLength);
+            }.Run(entityLength);*/
+            for (var i = 0; i != entityLength; i++)
+            {
+                var e = entityArray[i];
+                var m = EntityManager.GetComponentData<ModelIdent>(e);
+                
+                if (e.Index == 0)
+                {
+                    Debug.Log($"Some weird things: {entities[i].Source} {entities[i].ModelId}");
+                    using (var allEntities = EntityManager.GetAllEntities())
+                    {
+                        var str = string.Empty;
+                        foreach (var entity in allEntities)
+                        {
+                            str += $"{entity}\n";
+                        }
+                        Debug.Log(str);
+                    }
+                }
+                
+                entities[i] = new SnapshotEntityInformation(e, m.Id);
+            }
 
             return entities;
         }
@@ -103,8 +124,16 @@ namespace StormiumShared.Core.Networking
         private unsafe void WriteFullEntities(ref DataBufferWriter data, ref NativeArray<SnapshotEntityInformation> entities)
         {
             data.WriteByte((byte) 0);
-            data.WriteDynamicInt((ulong) entities.Length);
-            if (entities.Length > 0) data.WriteDataSafe((byte*) entities.GetUnsafePtr(), entities.Length * sizeof(SnapshotEntityInformation), default);
+            data.WriteInt(entities.Length);
+            for (var i = 0; i != entities.Length; i++)
+            {
+                var entity = entities[i].Source;
+                var modelId = entities[i].ModelId;
+                
+                data.WriteDynamicIntWithMask((ulong) entity.Index, (ulong) entity.Version, (ulong) modelId);
+            }
+
+            //if (entities.Length > 0) data.WriteDataSafe((byte*) entities.GetUnsafePtr(), entities.Length * sizeof(SnapshotEntityInformation), default);
         }
 
         private unsafe void WriteIncrementalEntities(ref DataBufferWriter data, ref NativeArray<SnapshotEntityInformation> entities, ref StSnapshotRuntime previousRuntime)
@@ -199,7 +228,7 @@ namespace StormiumShared.Core.Networking
 
             // Write Game time
             Profiler.BeginSample("Write Header");
-            data.WriteRef(ref header.SnapshotIdx);
+            data.WriteInt(header.SnapshotIdx);
             data.WriteRef(ref gt);
             Profiler.EndSample();
 
@@ -244,8 +273,7 @@ namespace StormiumShared.Core.Networking
 
                 // Used for skipping data when reading
                 Profiler.BeginSample("Other...");
-                data.WriteDynamicInt((ulong) pattern.Id);
-                data.WriteDynamicInt((ulong) sysData.Length);
+                data.WriteDynamicIntWithMask((ulong) pattern.Id, (ulong) sysData.Length);
                 data.WriteBuffer(sysData);
                 Profiler.EndSample();
                 sysData.Dispose();
@@ -263,14 +291,6 @@ namespace StormiumShared.Core.Networking
                 throw new Exception($"{nameof(previousRuntime.Allocator)} is set as None or Invalid. This may be caused by a non defined or corrupted runtime.");
             }
 
-            /*using (var file = File.Create(Application.streamingAssetsPath + "/snapshot_" + Environment.TickCount + ".bin"))
-            {
-                for (int i = 0; i != data.Length; i++)
-                {
-                    file.WriteByte(data.DataPtr[i]);
-                }
-            }*/
-
             // --------------------------------------------------------------------------- //
             // Read Only Data...
             var allocator = previousRuntime.Allocator;
@@ -287,14 +307,14 @@ namespace StormiumShared.Core.Networking
             // Actual code
             // --------------------------------------------------------------------------- //
             var snapshotIdx = data.ReadValue<int>();
-            var gameTime = data.ReadValue<GameTime>();
+            var gameTime    = data.ReadValue<GameTime>();
 
             var header  = new StSnapshotHeader(gameTime, snapshotIdx, sender);
             var runtime = new StSnapshotRuntime(header, previousRuntime, allocator);
 
             // Read Entity Data
             SnapshotManageEntities.UpdateResult entitiesUpdateResult = default;
-            
+
             var entityDataType = data.ReadValue<byte>();
             switch (entityDataType)
             {
@@ -303,11 +323,11 @@ namespace StormiumShared.Core.Networking
                 {
                     ReadFullEntities(out var tempEntities, ref data, ref allocator, exchange);
                     entitiesUpdateResult = SnapshotManageEntities.UpdateFrom(previousRuntime.Entities, tempEntities, allocator);
-                    
+
                     if (runtime.Entities.IsCreated)
                         runtime.Entities.Dispose();
                     runtime.Entities = tempEntities;
-                    
+
                     break;
                 }
                 case 1:
@@ -330,9 +350,11 @@ namespace StormiumShared.Core.Networking
             var systemLength = data.ReadValue<int>();
             for (var i = 0; i != systemLength; i++)
             {
-                var foreignSystemPattern = (int) data.ReadDynInteger();
-                var length               = (int) data.ReadDynInteger();
-                var system        = GetSystem(exchange.GetOriginId(foreignSystemPattern));
+                data.ReadDynIntegerFromMask(out var uForeignSystemPattern, out var uLength);
+
+                var foreignSystemPattern = (int) uForeignSystemPattern;
+                var length               = (int) uLength;
+                var system               = GetSystem(exchange.GetOriginId(foreignSystemPattern));
 
                 system.ReadData(sender, runtime, new DataBufferReader(data, data.CurrReadIndex, data.CurrReadIndex + length));
 
@@ -344,20 +366,35 @@ namespace StormiumShared.Core.Networking
 
         private unsafe void ReadFullEntities(out NativeArray<SnapshotEntityInformation> entities, ref DataBufferReader data, ref Allocator allocator, PatternBankExchange exchange)
         {
-            var entityLength = (int) data.ReadDynInteger();
+            var entityLength = data.ReadValue<int>();
             if (entityLength <= 0) Debug.LogWarning("No entities.");
 
             entities = new NativeArray<SnapshotEntityInformation>(entityLength, allocator);
-            UnsafeUtility.MemCpy(entities.GetUnsafePtr(), data.DataPtr + data.CurrReadIndex, entityLength * sizeof(SnapshotEntityInformation));
+            //UnsafeUtility.MemCpy(entities.GetUnsafePtr(), data.DataPtr + data.CurrReadIndex, entityLength * sizeof(SnapshotEntityInformation));
 
             for (var i = 0; i != entityLength; i++)
             {
-                var s = entities[i];
-                s.ModelId   = exchange.GetOriginId(s.ModelId);
-                entities[i] = s;
-            }
+                data.ReadDynIntegerFromMask(out var uEntityIndex, out var uEntityVersion, out var uModelId);
 
-            data.CurrReadIndex += entityLength * sizeof(SnapshotEntityInformation);
+                var entity  = new Entity {Index = (int) uEntityIndex, Version = (int) uEntityVersion};
+                var modelId = (int) uModelId;
+
+                if (modelId == 0)
+                {
+                    Debug.LogError("Error with model of " + entity);
+                    entities[i] = new SnapshotEntityInformation(entity, 0);
+                    continue;
+                }
+
+                var localModel = exchange.GetOriginId(modelId);
+                if (localModel == 0)
+                {
+                    Debug.Log($"Local model is zero while the server model is {modelId}");
+                    continue;
+                }
+
+                entities[i] = new SnapshotEntityInformation(entity, localModel);
+            }
         }
     }
 }

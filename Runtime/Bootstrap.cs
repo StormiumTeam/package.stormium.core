@@ -15,15 +15,11 @@ namespace Stormium.Core
             var mainWorld = World.Active;
             var em = mainWorld.GetOrCreateManager<EntityManager>();
             
-            var physicSettings = mainWorld.GetOrCreateManager<CPhysicSettings>();
-            
-            KnowPhysicGroups.Initialize(physicSettings);
-            
             // Create a local client
-            em.CreateEntity(typeof(ClientTag), typeof(NetworkClient), typeof(SimulateEntity));
+            em.CreateEntity(typeof(ClientTag), typeof(NetworkClient), typeof(EntityAuthority));
             
             // Create a timer
-            em.CreateEntity(typeof(GameTimeComponent), typeof(SimulateEntity));
+            em.CreateEntity(typeof(GameTimeComponent), typeof(EntityAuthority));
         }
 
         protected override void OnUnregister()

@@ -7,6 +7,7 @@ namespace Runtime
     public abstract class SystemProvider : ComponentSystem
     {
         private EntityModelManager m_ModelManager;
+        private StormiumGameManager m_GameManager;
         private ModelIdent m_ModelIdent;
 
         protected override void OnCreateManager()
@@ -24,6 +25,8 @@ namespace Runtime
             if (m_ModelManager == null)
             {
                 m_ModelManager = World.GetOrCreateManager<EntityModelManager>();
+                m_GameManager = World.GetOrCreateManager<StormiumGameManager>();
+                
                 m_ModelIdent = m_ModelManager.Register($"EntityProvider.{GetType().Name}", SpawnEntity, DestroyEntity);
             }
 
@@ -38,5 +41,10 @@ namespace Runtime
         public abstract Entity SpawnEntity(Entity origin, StSnapshotRuntime snapshotRuntime);
 
         public abstract void DestroyEntity(Entity worldEntity);
+
+        public Entity SpawnLocal()
+        {
+            return m_GameManager.SpawnLocal(GetModelIdent());
+        }
     }
 }

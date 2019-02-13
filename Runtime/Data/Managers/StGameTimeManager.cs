@@ -11,7 +11,7 @@ namespace Stormium.Core
     [UpdateAfter(typeof(Initialization.PlayerUpdateTime))]
     public class StGameTimeManager : JobComponentSystem
     {
-        [RequireComponentTag(typeof(SimulateEntity)), BurstCompile]
+        [RequireComponentTag(typeof(EntityAuthority)), BurstCompile]
         private struct Job : IJobProcessComponentData<GameTimeComponent>
         {
             public int ActualTick;
@@ -36,7 +36,7 @@ namespace Stormium.Core
 
         protected override void OnCreateManager()
         {
-            SetSingleton(EntityManager.CreateEntity(typeof(GameTimeComponent), typeof(SimulateEntity)));
+            SetSingleton(EntityManager.CreateEntity(typeof(GameTimeComponent), typeof(EntityAuthority)));
         }
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
@@ -50,7 +50,7 @@ namespace Stormium.Core
 
         public void SetSingleton(Entity entity)
         {
-            if (EntityManager.HasComponent<GameTimeComponent>(entity) && EntityManager.HasComponent<SimulateEntity>(entity))
+            if (EntityManager.HasComponent<GameTimeComponent>(entity) && EntityManager.HasComponent<EntityAuthority>(entity))
             {
                 m_SingletonEntity = entity;
             }

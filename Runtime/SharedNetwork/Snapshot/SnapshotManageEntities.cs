@@ -76,12 +76,18 @@ namespace StormiumShared.Core.Networking
 
             foreach (var e in result.ToCreate)
             {
+                if (e.ModelId == 0)
+                {
+                    Debug.Log("Someone feeded us an invalid model!");
+                    continue;
+                }
+                
                 var worldEntity = modelMgr.SpawnEntity(e.ModelId, e.Source, snapshotRuntime);
 
                 PrivateSet(snapshotRuntime.SnapshotToWorld, e.Source, worldEntity);
                 PrivateSet(snapshotRuntime.WorldToSnapshot, worldEntity, e.Source);
                 
-                Debug.Log("Created " + worldEntity);
+                Debug.Log($"creation(w={worldEntity}, o={e.Source}) t={snapshotRuntime.Header.GameTime.Tick}");
             }
         }
 
@@ -89,17 +95,18 @@ namespace StormiumShared.Core.Networking
         {
             var entityMgr = world.GetExistingManager<EntityManager>();
             var modelMgr = world.GetExistingManager<EntityModelManager>();
+            
 
             foreach (var e in entitiesUpdateResult.ToDestroy)
             {
                 var worldEntity = snapshotRuntime.EntityToWorld(e.Source);
                 if (worldEntity == default || !entityMgr.Exists(worldEntity))
                 {
-                    Debug.LogError($"Inconsistency when removing entity (W: {worldEntity}, S: {e.Source})");
+                    Debug.LogError($"Inconsistency when removing entity (w={worldEntity}, o={e.Source}) t={snapshotRuntime.Header.GameTime.Tick}");
                     if (removeLinks)
                     {
                         snapshotRuntime.SnapshotToWorld.Remove(e.Source);
-                        snapshotRuntime.SnapshotToWorld.Remove(worldEntity);
+                        snapshotRuntime.WorldToSnapshot.Remove(worldEntity);
                     }
                     continue;
                 }
@@ -107,10 +114,10 @@ namespace StormiumShared.Core.Networking
                 if (removeLinks)
                 {
                     snapshotRuntime.SnapshotToWorld.Remove(e.Source);
-                    snapshotRuntime.SnapshotToWorld.Remove(worldEntity);
+                    snapshotRuntime.WorldToSnapshot.Remove(worldEntity);
                 }
                 
-                Debug.Log("Destroyed " + worldEntity);
+                Debug.Log($"destruction(w={worldEntity}, o={e.Source}) t={snapshotRuntime.Header.GameTime.Tick}");
                 
                 modelMgr.DestroyEntity(worldEntity, e.ModelId);
             }

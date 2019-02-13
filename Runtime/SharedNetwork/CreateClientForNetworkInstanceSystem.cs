@@ -58,9 +58,8 @@ namespace StormiumShared.Core.Networking
 
                             if (instanceData.IsLocal())
                                 EntityManager.SetComponentData(gamePlayer, new StGamePlayer(0, true));
-                            
+
                             EntityManager.AddComponent(gamePlayer, typeof(StGamePlayerToNetworkClient));
-                            EntityManager.AddComponent(gamePlayer, typeof(SimulateEntity));
                         }
                         else
                         {

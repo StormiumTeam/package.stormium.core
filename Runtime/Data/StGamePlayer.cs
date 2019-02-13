@@ -10,7 +10,7 @@ namespace Runtime.Data
 {
     public struct StGamePlayer : IComponentData
     {
-        public struct StreamerPayload : IMultiEntityDataPayload
+        public struct WritePayload : IWriteEntityDataPayload
         {
             public ComponentDataFromEntity<StGamePlayer> States;
             public ComponentDataFromEntity<StGamePlayerToNetworkClient> ToNetworkClients;
@@ -28,22 +28,32 @@ namespace Runtime.Data
                     data.WriteByte(0);
                 }
             }
+        }
 
+        public struct ReadPayload : IReadEntityDataPayload
+        {
+            public EntityManager EntityManager;
+            
             public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
             {
                 var player = data.ReadValue<StGamePlayer>();
                 player.IsSelf = data.ReadValue<byte>();
 
-                States[entity] = player;
+                EntityManager.SetComponentData(entity, player);
             }
         }
         
-        public class Streamer : SnapshotEntityDataManualStreamer<StGamePlayer, StreamerPayload>
+        public class Streamer : SnapshotEntityDataManualStreamer<StGamePlayer, WritePayload, ReadPayload>
         {
-            protected override void UpdatePayload(ref StreamerPayload current)
+            protected override void UpdatePayloadW(ref WritePayload current)
             {
                 current.States = States;
                 current.ToNetworkClients = GetComponentDataFromEntity<StGamePlayerToNetworkClient>();
+            }
+
+            protected override void UpdatePayloadR(ref ReadPayload current)
+            {
+                current.EntityManager = EntityManager;
             }
         }
 

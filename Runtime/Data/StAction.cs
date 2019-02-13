@@ -37,16 +37,19 @@ namespace package.stormium.core
 
     public struct StActionOwner : IComponentData
     {
-        public Entity Target;
-
-        public StActionOwner(Entity owner)
+        public Entity LivableTarget;
+        public Entity InputTarget;
+        
+        public StActionOwner(Entity livable, Entity input)
         {
-            Target = owner;
+            LivableTarget = livable;
+            InputTarget = input;
         }
         
-        public bool TargetValid()
+        public bool TargetsValid()
         {
-            return World.Active.GetExistingManager<EntityManager>().Exists(Target);
+            return World.Active.GetExistingManager<EntityManager>().Exists(LivableTarget)
+                && World.Active.GetExistingManager<EntityManager>().Exists(InputTarget);
         }
     }
 
@@ -75,59 +78,68 @@ namespace package.stormium.core
 
     public struct StActionAmmo : IComponentData
     {
-        public int Ammo;
-        public int AmmoUsage;
-        public int AmmoMax;
+        public int Value;
+        public int Usage;
+        public int Max;
 
-        public StActionAmmo(int ammoUsage, int ammoMax)
+        public StActionAmmo(int usage, int max)
         {
-            Ammo = 0;
-            AmmoUsage = ammoUsage;
-            AmmoMax = ammoMax;
+            Value = 0;
+            Usage = usage;
+            Max = max;
         }
         
-        public StActionAmmo(int ammoUsage, int ammoMax, int ammo)
+        public StActionAmmo(int usage, int max, int value)
         {
-            Ammo      = ammo;
-            AmmoUsage = ammoUsage;
-            AmmoMax   = ammoMax;
+            Value      = value;
+            Usage = usage;
+            Max   = max;
         }
 
         public int GetRealAmmo()
         {
-            if (AmmoMax <= 0)
+            if (Max <= 0)
                 return 0;
-            if (AmmoUsage <= 0)
+            if (Usage <= 0)
                 return 1;
             
-            var usage = math.max(AmmoUsage, 1);
-            var max = math.max(AmmoMax, 1);
+            var usage = math.max(Usage, 1);
+            var max = math.max(Max, 1);
 
             return max / usage;
+        }
+
+        public void IncreaseFromDelta(int deltaTick)
+        {
+            Value += deltaTick;
+            Value = math.clamp(Value, 0, Max);
         }
     }
 
     public struct StActionAmmoCooldown : IComponentData
     {
-        public float StartTime;
-        public float Cooldown;
+        public int StartTick;
+        public int Cooldown;
 
-        public StActionAmmoCooldown(float startTime)
+        public StActionAmmoCooldown(int startTick)
         {
-            StartTime = startTime;
-            Cooldown = -1f;
+            StartTick = startTick;
+            Cooldown = -1;
         }
 
-        public StActionAmmoCooldown(float startTime, float cooldown)
+        public StActionAmmoCooldown(int startTick, int cooldown) : this(startTick)
         {
-            StartTime = startTime;
             Cooldown = cooldown;
         }
 
-        public bool CooldownFinished()
+        public bool CooldownFinished(int tick)
         {
-            return StartTime < 0 || Time.time > (StartTime + Cooldown);
+            return StartTick <= 0 || tick > StartTick + Cooldown;
         }
+    }
+
+    public struct StActionSimpleFire : IComponentData
+    {
     }
 
     public struct StActionDualSwitch : IComponentData
