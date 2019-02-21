@@ -1,3 +1,4 @@
+using StormiumShared.Core.Networking;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -11,5 +12,8 @@ namespace Stormium.Core
         {
             Value = value;
         }
+        
+        public class Streamer : SnapshotEntityDataAutomaticStreamer<Velocity>
+        {}
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using package.stormiumteam.shared;
 using Unity.Entities;
+using UnityEngine;
 
 namespace Stormium.Core
 {
@@ -17,6 +18,7 @@ namespace Stormium.Core
 	public class StPhysicQueryManager : ComponentSystem
 	{
 		private List<IOnQueryEnableCollisionFor> m_ReenableCollisions;
+		private int m_RequestLength;
 
 		protected override void OnCreateManager()
 		{
@@ -25,11 +27,16 @@ namespace Stormium.Core
 
 		protected override void OnUpdate()
 		{
-			
+			if (m_RequestLength > 0)
+			{
+				Debug.LogError($"{m_RequestLength} system(s) forgot to call ReenableCollisions() !!!");
+			}
 		}
 
 		public void EnableCollisionFor(Entity entity)
 		{
+			m_RequestLength++;
+			
 			ReenableCollisions();
 			
 			m_ReenableCollisions.Clear();
@@ -50,12 +57,17 @@ namespace Stormium.Core
 		public void ReenableCollisions()
 		{
 			if (m_ReenableCollisions.Count <= 0)
+			{
+				m_RequestLength--;
 				return;
+			}
 
 			foreach (var obj in m_ReenableCollisions)
 			{
 				obj.EnableCollision();
 			}
+			
+			m_RequestLength--;
 		}
 	}
 }

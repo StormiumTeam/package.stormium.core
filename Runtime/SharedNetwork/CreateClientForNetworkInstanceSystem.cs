@@ -9,7 +9,7 @@ using UnityEngine.Experimental.PlayerLoop;
 
 namespace StormiumShared.Core.Networking
 {
-    [ExecuteAlways]
+    [AlwaysUpdateSystem]
     [UpdateInGroup(typeof(PostLateUpdate))]
     public class CreateClientForNetworkInstanceSystem : ComponentSystem
     {
@@ -82,6 +82,12 @@ namespace StormiumShared.Core.Networking
                 Debug.Log("Destroyed client.");
                 PostUpdateCommands.DestroyEntity(clientEntity);
             }, m_DestroyClientGroup);
+            
+            ForEach((Entity entity, ref StGamePlayerToNetworkClient gamePlayerToNetworkClient) =>
+            {
+                if (!EntityManager.Exists(gamePlayerToNetworkClient.Target))
+                    PostUpdateCommands.DestroyEntity(entity);
+            });
         }
     }
 }

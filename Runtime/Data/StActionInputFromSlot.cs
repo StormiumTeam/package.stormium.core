@@ -8,6 +8,7 @@ namespace Stormium.Core
 {
 	public struct StActionInputFromSlot : IComponentData
 	{
+		[SerializeField]
 		private byte m_ActiveFlags;
 
 		public bool IsActive
@@ -27,16 +28,13 @@ namespace Stormium.Core
 	{
 		protected override void OnUpdate()
 		{
-			ForEach((ref StActionInputFromSlot data, ref StActionSlot actionSlot, ref StActionOwner owner) =>
+			ForEach((ref StActionInputFromSlot data, ref StActionSlot actionSlot, ref OwnerState<PlayerDescription> player) =>
 			{
-				if (!owner.TargetsValid())
-					throw new InvalidOperationException($"(invalid) lt={owner.LivableTarget} it={owner.InputTarget}");
-
-				var target = owner.InputTarget;
+				var target = player.Target;
 				
 				if (!EntityManager.HasComponent<ActionUserCommand>(target))
 				{
-					Debug.Log(target);
+					Debug.Log("Has no ActionUserCommand: " + target);
 					return;
 				}
 

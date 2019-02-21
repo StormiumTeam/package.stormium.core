@@ -25,6 +25,9 @@ namespace Stormium.Core
 		{
 			m_ActiveFlags = Convert.ToByte(isActive);
 		}
+		
+		public class Streamer : SnapshotEntityComponentStatusStreamer<ActionUserCommand>
+		{}
 	}
 
 	[UpdateInGroup(typeof(STUpdateOrder.UO_Input))]
@@ -87,6 +90,8 @@ namespace Stormium.Core
 
 		protected override void OnUpdate()
 		{
+			base.OnUpdate();
+			
 			ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref StGamePlayer player) =>
 			{
 				if (player.IsSelf == 0)
@@ -105,7 +110,7 @@ namespace Stormium.Core
 			{
 				for (var i = 0; i != MaxAction; i++)
 				{
-					msg.WriteValue(m_InputStates[i]);
+					msg.WriteUnmanaged(m_InputStates[i]);
 				}
 
 				SyncToServer(m_SyncMessage, msg);

@@ -7,6 +7,11 @@ namespace Stormium.Core
     public static class STUpdateOrder
     {
 	    [UpdateAfter(typeof(UpdateLoop.IntEnd))]
+	    public class UO_EventManager : BarrierSystem
+	    {
+	    }
+	    
+	    [UpdateAfter(typeof(UO_EventManager))]
 	    public class UO_Input : BarrierSystem
 	    {}
 	    
@@ -25,9 +30,18 @@ namespace Stormium.Core
         [UpdateAfter(typeof(UO_CharacterBehavior))]
         public class UO_ActionBehavior : BarrierSystem
         {}
+
+        [UpdateAfter(typeof(UO_ActionBehavior))]
+        public class UO_ProjectileBehavior : BarrierSystem
+        {
+        }
         
-        [UpdateAfter(typeof(UO_CharacterBehavior))]
+        [UpdateAfter(typeof(UO_ProjectileBehavior))]
         public class UO_FinalizeData : BarrierSystem
+        {}
+        
+        [UpdateAfter(typeof(UO_FinalizeData))]
+        public class UO_GameMode : BarrierSystem
         {}
     }
 }

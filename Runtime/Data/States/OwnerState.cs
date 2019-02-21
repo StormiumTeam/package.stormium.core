@@ -1,132 +1,60 @@
+using System;
 using package.stormiumteam.networking.runtime.lowlevel;
 using StormiumShared.Core.Networking;
 using Unity.Entities;
 
 namespace Stormium.Core
 {
-    public struct OwnerToPlayerState : IStateData, IComponentData
+    public interface IOwnerDescription : IComponentData
     {
-        public struct WritePayload : IWriteEntityDataPayload
-        {
-            public ComponentDataFromEntity<OwnerToPlayerState> States;
-            
-            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
-            {
-                var state = States[entity];
-
-                data.WriteRef(ref state.Target);   
-            }
-        }
-
-        public struct ReadPayload : IReadEntityDataPayload
-        {
-            public EntityManager EntityManager;
-            
-            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
-            {
-                var worldTarget = runtime.EntityToWorld(data.ReadValue<Entity>());
-
-                EntityManager.SetComponentData(entity, new OwnerToPlayerState {Target = worldTarget});
-            }
-        }
-        
-        public class Streamer : SnapshotEntityDataManualStreamer<OwnerToPlayerState, WritePayload, ReadPayload>
-        {
-            protected override void UpdatePayloadW(ref WritePayload current)
-            {
-                current.States = States;
-            }
-
-            protected override void UpdatePayloadR(ref ReadPayload current)
-            {
-                current.EntityManager = EntityManager;
-            }
-        }
-
-        public Entity Target;
     }
-    
-    public struct OwnerToLivableState : IStateData, IComponentData
+
+    public struct LivableDescription : IOwnerDescription
     {
-        public struct WritePayload : IWriteEntityDataPayload
-        {
-            public ComponentDataFromEntity<OwnerToLivableState> States;
-            
-            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
-            {
-                var state = States[entity];
-
-                data.WriteRef(ref state.Target);   
-            }
-        }
-
-        public struct ReadPayload : IReadEntityDataPayload
-        {
-            public EntityManager EntityManager;
-            
-            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
-            {
-                var worldTarget = runtime.EntityToWorld(data.ReadValue<Entity>());
-
-                EntityManager.SetComponentData(entity, new OwnerToLivableState {Target = worldTarget});
-            }
-        }
-        
-        public class Streamer : SnapshotEntityDataManualStreamer<OwnerToLivableState, WritePayload, ReadPayload>
-        {
-            protected override void UpdatePayloadW(ref WritePayload current)
-            {
-                current.States = States;
-            }
-
-            protected override void UpdatePayloadR(ref ReadPayload current)
-            {
-                current.EntityManager = EntityManager;
-            }
-        }
-
-        public Entity Target;
     }
-    
-    public struct OwnerToActionState : IStateData, IComponentData
+
+    public struct CharacterDescription : IOwnerDescription
     {
-        public struct WritePayload : IWriteEntityDataPayload
+    }
+
+    public struct PlayerDescription : IOwnerDescription
+    {
+    }
+
+    public struct ActionDescription : IOwnerDescription
+    {
+    }
+
+    public struct ProjectileDescription : IOwnerDescription
+    {
+    }
+
+    public static class OwnerState
+    {
+        public static void SetOwnerData(this EntityManager entityManager, Entity source, Entity owner)
         {
-            public ComponentDataFromEntity<OwnerToActionState> States;
-            
-            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
-            {
-                var state = States[entity];
-
-                data.WriteRef(ref state.Target);   
-            }
+            // todo: get all owner types, then get the one from the owner entity, compare them and add them to the source as OwnerState<T>
+            throw new NotImplementedException();
         }
+    }
 
-        public struct ReadPayload : IReadEntityDataPayload
-        {
-            public EntityManager EntityManager;
-            
-            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
-            {
-                var worldTarget = runtime.EntityToWorld(data.ReadValue<Entity>());
-
-                EntityManager.SetComponentData(entity, new OwnerToActionState {Target = worldTarget});
-            }
-        }
-        
-        public class Streamer : SnapshotEntityDataManualStreamer<OwnerToActionState, WritePayload, ReadPayload>
-        {
-            protected override void UpdatePayloadW(ref WritePayload current)
-            {
-                current.States = States;
-            }
-
-            protected override void UpdatePayloadR(ref ReadPayload current)
-            {
-                current.EntityManager = EntityManager;
-            }
-        }
-
+    public struct OwnerState<TOwnerDescription> : IStateData, IComponentData, ISerializableAsPayload
+        where TOwnerDescription : struct, IOwnerDescription
+    {
         public Entity Target;
+
+        public void Write(ref DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+        {
+            data.WriteValue(Target);
+        }
+
+        public void Read(ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+        {
+            Target = runtime.EntityToWorld(data.ReadValue<Entity>());
+        }
+
+        public class Streamer : SnapshotEntityDataManualValueTypeStreamer<OwnerState<TOwnerDescription>>
+        {
+        }
     }
 }

@@ -1,7 +1,10 @@
-﻿using package.stormium.core;
+﻿using System;
+using Boo.Lang;
+using package.stormium.core;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.shared;
 using package.stormiumteam.shared.modding;
+using Runtime;
 using Scripts;
 using StormiumShared.Core;
 using StormiumShared.Core.Networking;
@@ -13,19 +16,20 @@ namespace Stormium.Core
     {
         protected override void OnRegister()
         {
-            var mainWorld = World.Active;
-            var em = mainWorld.GetOrCreateManager<EntityManager>();
-            
-            // Create a local client
-            em.CreateEntity(typeof(ClientTag), typeof(NetworkClient), typeof(EntityAuthority));
-            
-            // Create a timer
-            em.CreateEntity(typeof(GameTimeComponent), typeof(EntityAuthority));
+            var commandLineArgs = new List<string>(System.Environment.GetCommandLineArgs());
+            var m_isHeadless    = commandLineArgs.Contains("-batchmode");
+            var logName         = m_isHeadless ? "game_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") : "game";
+            GameDebug.Init(".", logName);
         }
 
         protected override void OnUnregister()
         {
-            
+
+        }
+
+        internal static void register()
+        {
+            new Bootstrap().OnRegister();
         }
     }
 }

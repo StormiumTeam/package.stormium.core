@@ -10,8 +10,8 @@ namespace package.stormium.core
         public StFirstPersonCameraInputsBehaviour Inputs;
     }
 
-    public class StFirstPersonCameraWrapper : SharedComponentDataWrapper<StFirstPersonCamera>
+    /*public class StFirstPersonCameraWrapper : SharedComponentDataWrapper<StFirstPersonCamera>
     {
         
-    }
+    }*/
 }

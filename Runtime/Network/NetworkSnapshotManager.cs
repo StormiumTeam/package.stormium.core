@@ -13,14 +13,41 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using UnityEngine;
+using UnityEngine.Experimental.PlayerLoop;
 using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
 using UpdateLoop = package.stormiumteam.networking.runtime.highlevel.UpdateLoop;
 
 namespace Stormium.Core.Networking
 {
+    /*[UpdateAfter(typeof(UpdateLoop.IntEnd))]
+    public class NetworkSnapshotManagerClient : GameBaseSystem
+    {
+        protected override void OnUpdate()
+        {
+            if ((GameMgr.GameType & GameType.Client) == 0)
+                return;
+            
+            var mgr = World.GetOrCreateManager<NetworkSnapshotManager>();
+            mgr.DoClientUpdate();
+        }
+    }
+
     [UpdateAfter(typeof(UpdateLoop.IntEnd))]
-    public unsafe class NetworkSnapshotManager : ComponentSystem, INativeEventOnGUI
+    [UpdateAfter(typeof(PostLateUpdate))]
+    public class NetworkSnapshotManagerServer : GameBaseSystem
+    {
+        protected override void OnUpdate()
+        {
+            if ((GameMgr.GameType & GameType.Server) == 0)
+                return;
+                
+            var mgr = World.GetOrCreateManager<NetworkSnapshotManager>();
+            mgr.DoServerUpdate();
+        }
+    }*/
+    
+    public unsafe class NetworkSnapshotManager : GameBaseSystem, INativeEventOnGUI
     {
         public struct ClientSnapshotState : ISystemStateComponentData
         {
@@ -71,19 +98,16 @@ namespace Stormium.Core.Networking
         private float m_AvgSnapshotSizeCompressed;
         private int   m_ReceivedSnapshotOnFrame;
 
+        private long m_ReadTime;
+
         private int m_SnapshotCount;
         private int m_SnapshotInQueue;
+        public StSnapshotRuntime CurrentSnapshot => m_CurrentRuntime;
 
         protected override void OnCreateManager()
         {
-            m_ClientSnapshots      = new Dictionary<Entity, ClientSnapshotInformation>(16);
-            m_SnapshotDataToApply = new List<SnapshotDataToApply>();
-
-            m_SnapshotCount = 1;
-        }
-
-        protected override void OnStartRunning()
-        {
+            base.OnCreateManager();
+            
             m_SnapshotPattern = World.GetExistingManager<NetPatternSystem>()
                                      .GetLocalBank()
                                      .Register(new PatternIdent("SyncSnapshot"));
@@ -95,26 +119,40 @@ namespace Stormium.Core.Networking
             m_CurrentRuntime = new StSnapshotRuntime(default, Allocator.Persistent);
 
             World.GetExistingManager<AppEventSystem>().SubscribeToAll(this);
+            
+            m_ClientSnapshots      = new Dictionary<Entity, ClientSnapshotInformation>(16);
+            m_SnapshotDataToApply = new List<SnapshotDataToApply>();
+
+            m_SnapshotCount = 1;
         }
 
         protected override void OnUpdate()
         {
-            // We need to complete all jobs that are writing to entity components.
+            DoClientUpdate();
+            DoServerUpdate();
+        }
+
+        public void DoClientUpdate()
+        {
             EntityManager.CompleteAllJobs();
             m_SnapshotDataToApply.Clear();
-
-            var gameTime         = World.GetExistingManager<StGameTimeManager>().GetTimeFromSingleton();
-
+            
             ReceiveServerSnapshots();
-
+ 
             m_ReceivedSnapshotOnFrame = 0;
 
             ReadServerSnapshots();
 
             m_SnapshotInQueue = m_SnapshotDataToApply.Count;
             
-            ForEach((ref NetworkInstanceData data, ref GameTimeComponent clientTime) => { clientTime.Value.Tick += gameTime.DeltaTick; });
+            ForEach((ref NetworkInstanceData data, ref GameTimeComponent clientTime) => { clientTime.Value.Tick += TickDelta; });
+        }
 
+        public void DoServerUpdate()
+        {
+            EntityManager.CompleteAllJobs();
+            m_SnapshotDataToApply.Clear();
+            
             using (var entityArray = m_ClientWithoutState.ToEntityArray(Allocator.TempJob))
             {
                 foreach (var e in entityArray)
@@ -180,6 +218,12 @@ namespace Stormium.Core.Networking
                     };
                     
                     toApply.Alloc((IntPtr) reader.DataPtr, reader.CurrReadIndex, reader.Length);
+
+                    /*while (m_SnapshotDataToApply.Count > 0) // not a good idea for deltas
+                    {
+                        m_SnapshotDataToApply[m_SnapshotDataToApply.Count - 1].Free();
+                        m_SnapshotDataToApply.RemoveAt(m_SnapshotDataToApply.Count - 1);
+                    }*/
                     
                     m_SnapshotDataToApply.Add(toApply);
                 }
@@ -190,6 +234,7 @@ namespace Stormium.Core.Networking
         {
             var gameTime         = World.GetExistingManager<StGameTimeManager>().GetTimeFromSingleton();
             var snapshotMgr      = World.GetExistingManager<SnapshotManager>();
+            var sw = new Stopwatch();
 
             //Debug.Log("Message before crash...");
             foreach (var value in m_SnapshotDataToApply)
@@ -228,7 +273,13 @@ namespace Stormium.Core.Networking
 
                         try
                         {
+                            Profiler.BeginSample("Applying snapshot");
+                            sw.Restart();
                             m_CurrentRuntime = snapshotMgr.ApplySnapshotFromData(value.Sender, ref data, ref m_CurrentRuntime, value.Exchange);
+                            sw.Stop();
+
+                            m_ReadTime = sw.ElapsedTicks;
+                            Profiler.EndSample();
                         }
                         catch (Exception ex)
                         {
@@ -284,17 +335,18 @@ namespace Stormium.Core.Networking
                     var clientEntity  = networkToClient.Target;
                     var clientSnapshotInfo = m_ClientSnapshots[clientEntity];
                     var clientRuntime = clientSnapshotInfo.Runtime;
+                    var isFullSnapshot = clientSnapshotInfo.GenerationTimeAvg <= 1;
 
                     sw.Restart();
                     
                     var data = new DataBufferWriter(0, Allocator.TempJob);
 
-                    data.WriteValue(MessageType.MessagePattern);
-                    data.WriteValue<int>(m_SnapshotPattern.Id);
+                    data.WriteUnmanaged(MessageType.MessagePattern);
+                    data.WriteUnmanaged<int>(m_SnapshotPattern.Id);
 
                     var genData = new DataBufferWriter(0, Allocator.Persistent);
                     Profiler.BeginSample("Generation for " + clientEntity);
-                    var generation = snapshotMgr.GenerateForConnection(localClient, clientEntity, entities, true, m_SnapshotCount++, gameTime, Allocator.Persistent, ref genData, ref clientRuntime);
+                    var generation = snapshotMgr.GenerateForConnection(localClient, clientEntity, entities, isFullSnapshot, m_SnapshotCount++, gameTime, Allocator.Persistent, ref genData, ref clientRuntime);
                     Profiler.EndSample();
                     
                     // Write the length of uncompressed data.
@@ -350,6 +402,11 @@ namespace Stormium.Core.Networking
                 GUILayout.Label($"Avg Snapshot Size={m_AvgSnapshotSize:F0}B (c={m_AvgSnapshotSizeCompressed:F0}B)");
                 GUILayout.Label($"Frame Snapshot Count={m_ReceivedSnapshotOnFrame}");
                 GUILayout.Space(1);
+                if (GameMgr.GameType == GameType.Client)
+                {
+                    GUILayout.Label($"ReadTime={m_ReadTime}t");
+                }
+                
                 ForEach((ref NetworkInstanceData networkInstanceData, ref NetworkInstanceToClient networkToClient) =>
                 {
                     if (networkInstanceData.InstanceType != InstanceType.Client)

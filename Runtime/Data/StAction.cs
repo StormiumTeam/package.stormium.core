@@ -1,4 +1,6 @@
 using System;
+using package.stormiumteam.networking.runtime.lowlevel;
+using StormiumShared.Core.Networking;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -32,24 +34,6 @@ namespace package.stormium.core
         public Type GetActionType()
         {
             return TypeManager.GetType(ActionTypeIndex);
-        }
-    }
-
-    public struct StActionOwner : IComponentData
-    {
-        public Entity LivableTarget;
-        public Entity InputTarget;
-        
-        public StActionOwner(Entity livable, Entity input)
-        {
-            LivableTarget = livable;
-            InputTarget = input;
-        }
-        
-        public bool TargetsValid()
-        {
-            return World.Active.GetExistingManager<EntityManager>().Exists(LivableTarget)
-                && World.Active.GetExistingManager<EntityManager>().Exists(InputTarget);
         }
     }
 

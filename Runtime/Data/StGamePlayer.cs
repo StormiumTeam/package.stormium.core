@@ -1,5 +1,6 @@
 using System;
 using package.stormiumteam.networking.runtime.lowlevel;
+using Stormium.Core;
 using StormiumShared.Core.Networking;
 using Unity.Collections;
 using Unity.Entities;
@@ -10,14 +11,13 @@ namespace Runtime.Data
 {
     public struct StGamePlayer : IComponentData
     {
-        public struct WritePayload : IWriteEntityDataPayload
+        public struct WritePayload : IWriteEntityDataPayload<StGamePlayer>
         {
-            public ComponentDataFromEntity<StGamePlayer> States;
             public ComponentDataFromEntity<StGamePlayerToNetworkClient> ToNetworkClients;
 
-            public void Write(int index, Entity entity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+            public void Write(int index, Entity entity, ComponentDataFromEntity<StGamePlayer> stateFromEntity, ComponentDataFromEntity<DataChanged<StGamePlayer>> changeFromEntity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
             {
-                data.WriteValue(States[entity]);
+                data.WriteUnmanaged(stateFromEntity[entity]);
                 if (ToNetworkClients.Exists(entity))
                 {
                     // Is the user owned from the same client? (1 = yes, 0 = no)
@@ -30,30 +30,26 @@ namespace Runtime.Data
             }
         }
 
-        public struct ReadPayload : IReadEntityDataPayload
+        public struct ReadPayload : IReadEntityDataPayload<StGamePlayer>
         {
-            public EntityManager EntityManager;
-            
-            public void Read(int index, Entity entity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+            public void Read(int index, Entity entity, ComponentDataFromEntity<StGamePlayer> dataFromEntity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
             {
                 var player = data.ReadValue<StGamePlayer>();
                 player.IsSelf = data.ReadValue<byte>();
 
-                EntityManager.SetComponentData(entity, player);
+                dataFromEntity[entity] = player;
             }
-        }
+        } 
         
         public class Streamer : SnapshotEntityDataManualStreamer<StGamePlayer, WritePayload, ReadPayload>
         {
             protected override void UpdatePayloadW(ref WritePayload current)
             {
-                current.States = States;
                 current.ToNetworkClients = GetComponentDataFromEntity<StGamePlayerToNetworkClient>();
             }
 
             protected override void UpdatePayloadR(ref ReadPayload current)
             {
-                current.EntityManager = EntityManager;
             }
         }
 
@@ -93,17 +89,18 @@ namespace Runtime.Data
 
     public class StGamePlayerProvider : SystemProvider
     {
-        public override Entity SpawnEntity(Entity origin, StSnapshotRuntime snapshotRuntime)
+        protected override Entity SpawnEntity(Entity origin, StSnapshotRuntime snapshotRuntime)
         {
             return EntityManager.CreateEntity
             (
+                ComponentType.Create<PlayerDescription>(),
                 ComponentType.Create<StGamePlayer>(),
                 ComponentType.Create<ModelIdent>(),
                 ComponentType.Create<GenerateEntitySnapshot>()
             );
         }
 
-        public override void DestroyEntity(Entity worldEntity)
+        protected override void DestroyEntity(Entity worldEntity)
         {
             // should we also destroy attached modules?
             EntityManager.DestroyEntity(worldEntity);

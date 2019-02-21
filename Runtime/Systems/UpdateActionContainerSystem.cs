@@ -10,30 +10,20 @@ namespace Stormium.Core
 		protected override void OnUpdate()
 		{
 			// First clear buffers...
-			ForEach((DynamicBuffer<StActionContainer> buffer) =>
+			ForEach((DynamicBuffer<StActionContainer> buffer) => { buffer.Clear(); });
+
+			ForEach((Entity entity, ref StActionTag actionTag, ref OwnerState<LivableDescription> livable) =>
 			{
-				buffer.Clear();
-			});
-			
-			ForEach((Entity entity, ref StActionTag actionTag, ref StActionOwner owner) =>
-			{
-				if (!EntityManager.Exists(owner.LivableTarget))
+				if (!EntityManager.Exists(livable.Target))
 				{
 					Debug.LogError("Owner doesn't exist anymore.");
 					return;
 				}
-				
-				if (!EntityManager.HasComponent(owner.LivableTarget, typeof(StActionContainer)))
-				{
-					Debug.LogWarning("Owner don't have an action container.");
-					return;
-				}
 
-				// TODO: This can corrupt game state.
-				var newBuffer = PostUpdateCommands.SetBuffer<StActionContainer>(owner.LivableTarget);
-				var oldBuffer = EntityManager.GetBuffer<StActionContainer>(owner.LivableTarget);
-				
-				newBuffer.CopyFrom(oldBuffer.AsNativeArray());
+				var newBuffer = EntityManager.HasComponent(livable.Target, typeof(StActionContainer))
+					? PostUpdateCommands.SetBuffer<StActionContainer>(livable.Target)
+					: PostUpdateCommands.AddBuffer<StActionContainer>(livable.Target);
+
 				newBuffer.Add(new StActionContainer(entity));
 			});
 		}
