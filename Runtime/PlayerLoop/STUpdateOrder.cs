@@ -1,4 +1,5 @@
 using package.stormiumteam.networking.runtime.highlevel;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Transforms;
 
@@ -27,7 +28,7 @@ namespace Stormium.Core
         public class UO_CharacterBehavior : ComponentSystemGroup
         {}
         
-        [UpdateAfter(typeof(UO_CharacterBehavior)), UpdateAfter(typeof(TransformSystemGroup))]
+        [UpdateAfter(typeof(UO_CharacterBehavior)), UpdateAfter(typeof(TransformSystemGroup)), UpdateAfter(typeof(LivableSystemGroup))]
         public class UO_FinalizeData : ComponentSystemGroup
         {}
         

@@ -97,6 +97,7 @@ namespace Stormium.Core
         }
     }
 
+    [UpdateInGroup(typeof(InputSystemGroup))]
     public class BasicUserCommandUpdateLocal : BaseComponentSystem
     {
         private InputActionAsset m_Asset;

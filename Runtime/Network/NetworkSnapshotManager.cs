@@ -109,7 +109,7 @@ namespace Stormium.Core.Networking
         {
             base.OnCreateManager();
 
-            m_SnapshotPattern = World.GetExistingManager<NetPatternSystem>()
+            m_SnapshotPattern = World.GetOrCreateManager<NetPatternSystem>()
                                      .GetLocalBank()
                                      .Register(new PatternIdent("SyncSnapshot"));
 
@@ -119,7 +119,7 @@ namespace Stormium.Core.Networking
 
             m_CurrentRuntime = new SnapshotRuntime(default, Allocator.Persistent);
 
-            World.GetExistingManager<AppEventSystem>().SubscribeToAll(this);
+            World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
 
             m_ClientSnapshots     = new Dictionary<Entity, ClientSnapshotInformation>(16);
             m_SnapshotDataToApply = new List<SnapshotDataToApply>();
