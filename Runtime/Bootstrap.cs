@@ -1,14 +1,7 @@
 ﻿using System;
-using Boo.Lang;
-using package.stormium.core;
-using package.stormiumteam.networking.runtime.highlevel;
-using package.stormiumteam.shared;
+using System.Collections.Generic;
 using package.stormiumteam.shared.modding;
-using Runtime;
-using Scripts;
-using StormiumShared.Core;
-using StormiumShared.Core.Networking;
-using Unity.Entities;
+using StormiumTeam.GameBase;
 
 namespace Stormium.Core
 {
@@ -16,7 +9,7 @@ namespace Stormium.Core
     {
         protected override void OnRegister()
         {
-            var commandLineArgs = new List<string>(System.Environment.GetCommandLineArgs());
+            var commandLineArgs = new List<string>(Environment.GetCommandLineArgs());
             var m_isHeadless    = commandLineArgs.Contains("-batchmode");
             var logName         = m_isHeadless ? "game_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff") : "game";
             GameDebug.Init(".", logName);

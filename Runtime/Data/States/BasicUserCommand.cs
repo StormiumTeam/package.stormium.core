@@ -4,13 +4,11 @@ using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
 using package.stormiumteam.shared;
-using Runtime.Data;
 using StormiumShared.Core.Networking;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using UnityEngine.Experimental.Input;
 
 namespace Stormium.Core
@@ -19,9 +17,9 @@ namespace Stormium.Core
     {
         public struct WritePayload : IWriteEntityDataPayload<BasicUserCommand>
         {
-            public ComponentDataFromEntity<StGamePlayer>     Players;
+            public ComponentDataFromEntity<GamePlayer>     Players;
 
-            public void Write(int index, Entity entity, ComponentDataFromEntity<BasicUserCommand> stateFromEntity, ComponentDataFromEntity<DataChanged<BasicUserCommand>> changeFromEntity, DataBufferWriter data, SnapshotReceiver receiver, StSnapshotRuntime runtime)
+            public void Write(int index, Entity entity, ComponentDataFromEntity<BasicUserCommand> stateFromEntity, ComponentDataFromEntity<DataChanged<BasicUserCommand>> changeFromEntity, DataBufferWriter data, SnapshotReceiver receiver, SnapshotRuntime runtime)
             {
                 data.WriteUnmanaged(stateFromEntity[entity]);
             }
@@ -31,13 +29,13 @@ namespace Stormium.Core
         {
             public EntityManager EntityManager;
 
-            public void Read(int index, Entity entity, ComponentDataFromEntity<BasicUserCommand> dataFromEntity, ref DataBufferReader data, SnapshotSender sender, StSnapshotRuntime runtime)
+            public void Read(int index, Entity entity, ComponentDataFromEntity<BasicUserCommand> dataFromEntity, ref DataBufferReader data, SnapshotSender sender, SnapshotRuntime runtime)
             {
                 var value = data.ReadValue<BasicUserCommand>();
                 // If the entity is attached to a player (in all cases) and if it's our own player, we don't set the new data.
-                if (EntityManager.HasComponent<StGamePlayer>(entity))
+                if (EntityManager.HasComponent<GamePlayer>(entity))
                 {
-                    if (EntityManager.GetComponentData<StGamePlayer>(entity).IsSelf == 1)
+                    if (EntityManager.GetComponentData<GamePlayer>(entity).IsSelf == 1)
                         return;
                 }
 
@@ -49,7 +47,7 @@ namespace Stormium.Core
         {
             protected override void UpdatePayloadW(ref WritePayload current)
             {
-                current.Players = GetComponentDataFromEntity<StGamePlayer>();
+                current.Players = GetComponentDataFromEntity<GamePlayer>();
             }
 
             protected override void UpdatePayloadR(ref ReadPayload current)
@@ -99,7 +97,7 @@ namespace Stormium.Core
         }
     }
 
-    public class BasicUserCommandUpdateLocal : ComponentSystem
+    public class BasicUserCommandUpdateLocal : BaseComponentSystem
     {
         private InputActionAsset m_Asset;
         private InputActionMap   m_InputMap;
@@ -118,14 +116,14 @@ namespace Stormium.Core
 
             Refresh();
 
-            m_SyncCommandId = World.GetOrCreateManager<NetPatternSystem>().GetLocalBank().Register("000SyncBasicUserCommand");
+            m_SyncCommandId = World.GetExistingManager<NetPatternSystem>().GetLocalBank().Register("000SyncBasicUserCommand");
         }
 
         protected override unsafe void OnUpdate()
         {
             m_ActualCommand.Look = GetNewAimLook(m_ActualCommand.Look, new float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")));
 
-            ForEach((ref StGamePlayer player, ref BasicUserCommand command) =>
+            ForEach((ref GamePlayer player, ref BasicUserCommand command) =>
             {
                 if (player.IsSelf == 0)
                     return;
@@ -172,10 +170,10 @@ namespace Stormium.Core
                         continue;
 
                     var clientEntity = EntityManager.GetComponentData<NetworkInstanceToClient>(foreignEntity).Target;
-                    if (!EntityManager.HasComponent<StNetworkClientToGamePlayer>(clientEntity))
+                    if (!EntityManager.HasComponent<NetworkClientToGamePlayer>(clientEntity))
                         continue;
 
-                    var playerEntity = EntityManager.GetComponentData<StNetworkClientToGamePlayer>(clientEntity).Target;
+                    var playerEntity = EntityManager.GetComponentData<NetworkClientToGamePlayer>(clientEntity).Target;
                     var userCommand = EntityManager.GetComponentData<BasicUserCommand>(playerEntity);
                     userCommand.ControlMask = buffer.ReadValue<byte>();
                     userCommand.Move = buffer.ReadValue<float2>();

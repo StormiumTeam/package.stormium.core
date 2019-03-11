@@ -3,14 +3,12 @@ using System.IO;
 using package.stormiumteam.networking;
 using package.stormiumteam.networking.runtime.highlevel;
 using package.stormiumteam.networking.runtime.lowlevel;
-using package.stormiumteam.shared;
-using Runtime.Data;
-using Runtime.Systems;
 using UnityEngine;
 using StormiumShared.Core.Networking;
+using StormiumTeam.GameBase;
+using StormiumTeam.GameBase.Systems;
 using Unity.Collections;
 using Unity.Entities;
-using UnityEngine.AddressableAssets;
 using UnityEngine.Experimental.Input;
 
 namespace Stormium.Core
@@ -26,7 +24,7 @@ namespace Stormium.Core
 			m_ActiveFlags = Convert.ToByte(isActive);
 		}
 		
-		public class Streamer : SnapshotEntityComponentStatusStreamer<ActionUserCommand>
+		public class Streamer : SnapshotEntityComponentStatusStreamerBuffer<ActionUserCommand>
 		{}
 	}
 
@@ -77,7 +75,7 @@ namespace Stormium.Core
 
 		private void GetInputFromClient(NetworkInstanceData networkInstance, Entity client, DataBufferReader data)
 		{
-			var playerEntity = EntityManager.GetComponentData<StNetworkClientToGamePlayer>(client).Target;
+			var playerEntity = EntityManager.GetComponentData<NetworkClientToGamePlayer>(client).Target;
 			var inputBuffer  = EntityManager.GetBuffer<ActionUserCommand>(playerEntity);
 
 			inputBuffer.ResizeUninitialized(MaxAction);
@@ -92,7 +90,7 @@ namespace Stormium.Core
 		{
 			base.OnUpdate();
 			
-			ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref StGamePlayer player) =>
+			ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref GamePlayer player) =>
 			{
 				if (player.IsSelf == 0)
 					return;

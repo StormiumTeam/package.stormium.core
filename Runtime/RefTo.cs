@@ -1,4 +1,3 @@
-using System;
 using Unity.Entities;
 
 namespace Stormium.Core
@@ -9,7 +8,7 @@ namespace Stormium.Core
     {
         public T Value;
 
-        public bool IsNull => ReferenceEquals(Value, null) || Value == null;
+        public bool IsNull => Value == null;
         
         public RefTo(T v)
         {

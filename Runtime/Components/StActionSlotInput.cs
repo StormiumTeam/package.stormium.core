@@ -1,12 +1,12 @@
 using System;
-using package.stormium.core;
-using Stormium.Core;
+using package.StormiumTeam.GameBase;
+using StormiumTeam.GameBase;
 using Unity.Entities;
 using UnityEngine;
 
 namespace Stormium.Core
 {
-	public struct StActionInputFromSlot : IComponentData
+	public struct StActionSlotInput : IComponentData
 	{
 		[SerializeField]
 		private byte m_ActiveFlags;
@@ -17,18 +17,17 @@ namespace Stormium.Core
 			set => m_ActiveFlags = Convert.ToByte(value);
 		}
 
-		public StActionInputFromSlot(bool active)
+		public StActionSlotInput(bool active)
 		{
 			m_ActiveFlags = Convert.ToByte(active);
 		}
 	}
 
-	[UpdateInGroup(typeof(STUpdateOrder.UO_ActionGrabInputs))]
 	public class StActionInputFromSlotUpdateSystem : ComponentSystem
 	{
 		protected override void OnUpdate()
 		{
-			ForEach((ref StActionInputFromSlot data, ref StActionSlot actionSlot, ref OwnerState<PlayerDescription> player) =>
+			ForEach((ref StActionSlotInput data, ref ActionSlot actionSlot, ref OwnerState<PlayerDescription> player) =>
 			{
 				var target = player.Target;
 				
