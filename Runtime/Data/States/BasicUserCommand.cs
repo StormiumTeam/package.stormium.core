@@ -175,6 +175,9 @@ namespace Stormium.Core
                         continue;
 
                     var playerEntity = EntityManager.GetComponentData<NetworkClientToGamePlayer>(clientEntity).Target;
+                    if (!EntityManager.HasComponent<BasicUserCommand>(playerEntity))
+                        continue;
+                           
                     var userCommand = EntityManager.GetComponentData<BasicUserCommand>(playerEntity);
                     userCommand.ControlMask = buffer.ReadValue<byte>();
                     userCommand.Move = buffer.ReadValue<float2>();

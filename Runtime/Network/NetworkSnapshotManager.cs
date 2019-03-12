@@ -233,7 +233,7 @@ namespace Stormium.Core.Networking
 
         public void ReadServerSnapshots()
         {
-            var gameTime    = GetSingleton<GameTimeComponent>().Value;
+            var gameTime    = GetSingleton<SingletonGameTime>();
             var snapshotMgr = World.GetExistingManager<SnapshotManager>();
             var sw          = new Stopwatch();
 
@@ -321,7 +321,7 @@ namespace Stormium.Core.Networking
         public void SendClientSnapshots()
         {
             var gameMgr     = World.GetExistingManager<GameManager>();
-            var gameTime    = GetSingleton<GameTimeComponent>().Value;
+            var gameTime    = GetSingleton<SingletonGameTime>().ToGameTime();
             var snapshotMgr = World.GetExistingManager<SnapshotManager>();
             var localClient = gameMgr.Client;
             var sw          = new Stopwatch();
