@@ -35,7 +35,7 @@ namespace Stormium.Core
                 // If the entity is attached to a player (in all cases) and if it's our own player, we don't set the new data.
                 if (EntityManager.HasComponent<GamePlayer>(entity))
                 {
-                    if (EntityManager.GetComponentData<GamePlayer>(entity).IsSelf == 1)
+                    if (EntityManager.GetComponentData<GamePlayer>(entity).IsSelf)
                         return;
                 }
 
@@ -126,7 +126,7 @@ namespace Stormium.Core
 
             ForEach((ref GamePlayer player, ref BasicUserCommand command) =>
             {
-                if (player.IsSelf == 0)
+                if (!player.IsSelf)
                     return;
 
                 command = m_ActualCommand;

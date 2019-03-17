@@ -15,13 +15,11 @@ namespace Stormium.Core
 {
 	public struct ActionUserCommand : IStateData, IBufferElementData
 	{
-		private readonly byte m_ActiveFlags;
-
-		public bool IsActive => Convert.ToBoolean(m_ActiveFlags);
-
+		public bool IsActive;
+		
 		public ActionUserCommand(bool isActive)
 		{
-			m_ActiveFlags = Convert.ToByte(isActive);
+			IsActive = isActive;
 		}
 		
 		public class Streamer : SnapshotEntityComponentStatusStreamerBuffer<ActionUserCommand>
@@ -92,7 +90,7 @@ namespace Stormium.Core
 			
 			ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref GamePlayer player) =>
 			{
-				if (player.IsSelf == 0)
+				if (!player.IsSelf)
 					return;
 
 				var newCommandBuffer = PostUpdateCommands.SetBuffer<ActionUserCommand>(e);

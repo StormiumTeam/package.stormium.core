@@ -8,17 +8,11 @@ namespace Stormium.Core
 {
 	public struct StActionSlotInput : IComponentData
 	{
-		public byte Flags;
-
-		public bool IsActive
-		{
-			get => Convert.ToBoolean(Flags);
-			set => Flags = Convert.ToByte(value);
-		}
+		public bool IsActive;
 
 		public StActionSlotInput(bool active)
 		{
-			Flags = Convert.ToByte(active);
+			IsActive = active;
 		}
 	}
 
