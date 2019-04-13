@@ -108,7 +108,7 @@ namespace Stormium.Core
 
         private PatternResult m_SyncCommandId;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
             var file = File.ReadAllText(Application.streamingAssetsPath + "/basic_input.json");
 
@@ -117,14 +117,21 @@ namespace Stormium.Core
 
             Refresh();
 
-            m_SyncCommandId = World.GetExistingManager<NetPatternSystem>().GetLocalBank().Register("000SyncBasicUserCommand");
+            m_SyncCommandId = World.GetExistingSystem<NetPatternSystem>().GetLocalBank().Register("000SyncBasicUserCommand");
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            
+            m_Asset.Disable();
         }
 
         protected override unsafe void OnUpdate()
         {
             m_ActualCommand.Look = GetNewAimLook(m_ActualCommand.Look, new float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")));
 
-            ForEach((ref GamePlayer player, ref BasicUserCommand command) =>
+            Entities.ForEach((ref GamePlayer player, ref BasicUserCommand command) =>
             {
                 if (!player.IsSelf)
                     return;
@@ -133,10 +140,10 @@ namespace Stormium.Core
             }); 
 
             // Send or receive the inputs
-            ForEach((Entity entity, ref NetworkInstanceData data) =>
+            Entities.ForEach((Entity entity, ref NetworkInstanceData data) =>
             {
-                var patternSystem = World.GetExistingManager<NetPatternSystem>();
-                var networkMgr    = World.GetExistingManager<NetworkManager>();
+                var patternSystem = World.GetExistingSystem<NetPatternSystem>();
+                var networkMgr    = World.GetExistingSystem<NetworkManager>();
 
                 if (data.InstanceType == InstanceType.Server)
                 {

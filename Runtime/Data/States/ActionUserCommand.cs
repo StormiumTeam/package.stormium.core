@@ -35,9 +35,9 @@ namespace Stormium.Core
 		private InputAction[] m_Actions;
 		private bool[]        m_InputStates;
 
-		protected override void OnCreateManager()
+		protected override void OnCreate()
 		{
-			base.OnCreateManager();
+			base.OnCreate();
 
 			m_Actions     = new InputAction[MaxAction];
 			m_InputStates = new bool[MaxAction];
@@ -50,6 +50,13 @@ namespace Stormium.Core
 			Refresh(asset);
 
 			m_SyncMessage = AddMessage(GetInputFromClient);
+		}
+
+		protected override void OnDestroy()
+		{
+			base.OnDestroy();
+			
+			Asset.Disable();
 		}
 
 		protected override void OnAssetRefresh()
@@ -88,7 +95,7 @@ namespace Stormium.Core
 		{
 			base.OnUpdate();
 			
-			ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref GamePlayer player) =>
+			Entities.ForEach((Entity e, DynamicBuffer<ActionUserCommand> commands, ref GamePlayer player) =>
 			{
 				if (!player.IsSelf)
 					return;

@@ -29,7 +29,7 @@ namespace Stormium.Core.Networking
             if ((GameMgr.GameType & GameType.Client) == 0)
                 return;
 
-            var mgr = World.GetExistingManager<NetworkSnapshotManager>();
+            var mgr = World.GetExistingSystem<NetworkSnapshotManager>();
             mgr.DoClientUpdate();
         }
     }
@@ -43,7 +43,7 @@ namespace Stormium.Core.Networking
             if ((GameMgr.GameType & GameType.Server) == 0)
                 return;
 
-            var mgr = World.GetExistingManager<NetworkSnapshotManager>();
+            var mgr = World.GetExistingSystem<NetworkSnapshotManager>();
             mgr.DoServerUpdate();
         }
     }
@@ -86,9 +86,9 @@ namespace Stormium.Core.Networking
 
         private PatternResult m_SnapshotPattern;
 
-        private ComponentGroup m_ClientWithoutState;
-        private ComponentGroup m_DestroyedClientWithState;
-        private ComponentGroup m_EntitiesToGenerate;
+        private EntityQuery m_ClientWithoutState;
+        private EntityQuery m_DestroyedClientWithState;
+        private EntityQuery m_EntitiesToGenerate;
 
         private SnapshotRuntime m_CurrentRuntime;
 
@@ -105,21 +105,21 @@ namespace Stormium.Core.Networking
         private int             m_SnapshotInQueue;
         public  SnapshotRuntime CurrentSnapshot => m_CurrentRuntime;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            base.OnCreateManager();
+            base.OnCreate();
 
-            m_SnapshotPattern = World.GetOrCreateManager<NetPatternSystem>()
+            m_SnapshotPattern = World.GetOrCreateSystem<NetPatternSystem>()
                                      .GetLocalBank()
                                      .Register(new PatternIdent("SyncSnapshot"));
 
-            m_ClientWithoutState       = GetComponentGroup(typeof(NetworkClient), ComponentType.Exclude<ClientSnapshotState>());
-            m_DestroyedClientWithState = GetComponentGroup(typeof(ClientSnapshotState), ComponentType.Exclude<NetworkClient>());
-            m_EntitiesToGenerate       = GetComponentGroup(typeof(GenerateEntitySnapshot));
+            m_ClientWithoutState       = GetEntityQuery(typeof(NetworkClient), ComponentType.Exclude<ClientSnapshotState>());
+            m_DestroyedClientWithState = GetEntityQuery(typeof(ClientSnapshotState), ComponentType.Exclude<NetworkClient>());
+            m_EntitiesToGenerate       = GetEntityQuery(typeof(GenerateEntitySnapshot));
 
             m_CurrentRuntime = new SnapshotRuntime(default, Allocator.Persistent);
 
-            World.GetOrCreateManager<AppEventSystem>().SubscribeToAll(this);
+            World.GetOrCreateSystem<AppEventSystem>().SubscribeToAll(this);
 
             m_ClientSnapshots     = new Dictionary<Entity, ClientSnapshotInformation>(16);
             m_SnapshotDataToApply = new List<SnapshotDataToApply>();
@@ -146,7 +146,7 @@ namespace Stormium.Core.Networking
 
             m_SnapshotInQueue = m_SnapshotDataToApply.Count;
 
-            ForEach((ref NetworkInstanceData data, ref GameTimeComponent clientTime) => { clientTime.Value.Tick += TickDelta; });
+            Entities.ForEach((ref NetworkInstanceData data, ref GameTimeComponent clientTime) => { clientTime.Value.Tick += TickDelta; });
         }
 
         public void DoServerUpdate()
@@ -182,10 +182,10 @@ namespace Stormium.Core.Networking
 
         public void ReceiveServerSnapshots()
         {
-            var networkMgr       = World.GetExistingManager<NetworkManager>();
-            var netPatternSystem = World.GetExistingManager<NetPatternSystem>();
+            var networkMgr       = World.GetExistingSystem<NetworkManager>();
+            var netPatternSystem = World.GetExistingSystem<NetPatternSystem>();
 
-            ForEach((DynamicBuffer<EventBuffer> eventBuffer, ref NetworkInstanceData data) =>
+            Entities.ForEach((DynamicBuffer<EventBuffer> eventBuffer, ref NetworkInstanceData data) =>
             {
                 for (int i = 0; i != eventBuffer.Length; i++)
                 {
@@ -208,11 +208,12 @@ namespace Stormium.Core.Networking
 
                     var size         = reader.ReadValue<int>();
                     var isCompressed = reader.ReadValue<bool>();
+                    var flags = reader.ReadValue<SnapshotFlags>();
 
                     //Debug.Log($"[{Time.frameCount}] Received from {data.ParentId} (s={size}, c={isCompressed})");
                     var toApply = new SnapshotDataToApply
                     {
-                        Sender        = new SnapshotSender {Client = networkMgr.GetNetworkInstanceEntity(ev.Invoker.Id), Flags = SnapshotFlags.None},
+                        Sender        = new SnapshotSender {Client = networkMgr.GetNetworkInstanceEntity(ev.Invoker.Id), Flags = flags},
                         TotalDataSize = size,
                         IsCompressed  = isCompressed,
                         Exchange      = exchange
@@ -234,7 +235,7 @@ namespace Stormium.Core.Networking
         public void ReadServerSnapshots()
         {
             var gameTime    = GetSingleton<SingletonGameTime>();
-            var snapshotMgr = World.GetExistingManager<SnapshotManager>();
+            var snapshotMgr = World.GetExistingSystem<SnapshotManager>();
             var sw          = new Stopwatch();
 
             //Debug.Log("Message before crash...");
@@ -304,7 +305,7 @@ namespace Stormium.Core.Networking
                     {
                         var diff = m_CurrentRuntime.Header.GameTime.Tick - clientTime.Value.Tick;
                         Debug.Log($"L.T.D. c={clientTime.Value.Tick} s={m_CurrentRuntime.Header.GameTime.Tick} d={diff} dt={m_CurrentRuntime.Header.GameTime.DeltaTick}");
-                        clientTime.Value.Tick = m_CurrentRuntime.Header.GameTime.Tick;
+                        clientTime.Value.Tick = m_CurrentRuntime.Header.GameTime.Tick + gameTime.DeltaTick;
 
                         EntityManager.SetComponentData(value.Sender.Client, clientTime);
                     }
@@ -320,16 +321,16 @@ namespace Stormium.Core.Networking
 
         public void SendClientSnapshots()
         {
-            var gameMgr     = World.GetExistingManager<GameManager>();
+            var gameMgr     = World.GetExistingSystem<GameManager>();
             var gameTime    = GetSingleton<SingletonGameTime>().ToGameTime();
-            var snapshotMgr = World.GetExistingManager<SnapshotManager>();
+            var snapshotMgr = World.GetExistingSystem<SnapshotManager>();
             var localClient = gameMgr.Client;
             var sw          = new Stopwatch();
 
             using (var entities = m_EntitiesToGenerate.ToEntityArray(Allocator.TempJob))
             {
                 // Send data to clients
-                ForEach((ref NetworkInstanceData networkInstanceData, ref NetworkInstanceToClient networkToClient) =>
+                Entities.ForEach((ref NetworkInstanceData networkInstanceData, ref NetworkInstanceToClient networkToClient) =>
                 {
                     if (networkInstanceData.InstanceType != InstanceType.Client)
                         return;
@@ -358,6 +359,9 @@ namespace Stormium.Core.Networking
 
                     // Write an information about if the data is compressed or not
                     data.WriteRef(ref isCompressed);
+                    
+                    // write the flag
+                    data.WriteValue(isFullSnapshot ? SnapshotFlags.FullData : SnapshotFlags.None);
 
                     var compressedLength = 0;
                     // If it should not be compressed, we write the data directly
@@ -409,7 +413,7 @@ namespace Stormium.Core.Networking
                     GUILayout.Label($"ReadTime={m_ReadTime}t");
                 }
 
-                ForEach((ref NetworkInstanceData networkInstanceData, ref NetworkInstanceToClient networkToClient) =>
+                Entities.ForEach((ref NetworkInstanceData networkInstanceData, ref NetworkInstanceToClient networkToClient) =>
                 {
                     if (networkInstanceData.InstanceType != InstanceType.Client)
                         return;
