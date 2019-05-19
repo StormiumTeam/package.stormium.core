@@ -14,7 +14,6 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using UnityEngine;
-using UnityEngine.Experimental.PlayerLoop;
 using UnityEngine.Profiling;
 using Debug = UnityEngine.Debug;
 using UpdateLoop = package.stormiumteam.networking.runtime.highlevel.UpdateLoop;
@@ -35,7 +34,6 @@ namespace Stormium.Core.Networking
     }
 
     [UpdateAfter(typeof(UpdateLoop.IntEnd))]
-    [UpdateAfter(typeof(PostLateUpdate))]
     public class NetworkSnapshotManagerPushIncoming : GameBaseSystem
     {
         protected override void OnUpdate()

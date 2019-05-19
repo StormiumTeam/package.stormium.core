@@ -20,7 +20,7 @@ namespace Stormium.Core
 	{
 		protected override void OnUpdate()
 		{
-			Entities.ForEach((ref StActionSlotInput data, ref ActionSlot actionSlot, ref OwnerState<PlayerDescription> player) =>
+			Entities.ForEach((ref StActionSlotInput data, ref ActionSlot actionSlot, ref Relative<PlayerDescription> player) =>
 			{
 				var target = player.Target;
 				

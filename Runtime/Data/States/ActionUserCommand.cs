@@ -9,7 +9,7 @@ using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Systems;
 using Unity.Collections;
 using Unity.Entities;
-using UnityEngine.Experimental.Input;
+using UnityEngine.InputSystem;
 
 namespace Stormium.Core
 {
