@@ -22,15 +22,15 @@ namespace Stormium.Core
 		{
 			Entities.ForEach((ref StActionSlotInput data, ref ActionSlot actionSlot, ref Relative<PlayerDescription> player) =>
 			{
-				var target = player.Target;
+				var target = player	.Target;
 				
-				if (!EntityManager.HasComponent<ActionUserCommand>(target))
+				if (!EntityManager.HasComponent<GamePlayerActionCommand>(target))
 				{
 					Debug.Log("Has no ActionUserCommand: " + target);
 					return;
 				}
 
-				var fireBuffer = EntityManager.GetBuffer<ActionUserCommand>(target);
+				var fireBuffer = EntityManager.GetBuffer<GamePlayerActionCommand>(target);
 				if (actionSlot.Value >= fireBuffer.Length)
 					return;
 				

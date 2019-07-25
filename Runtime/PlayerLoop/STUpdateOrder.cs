@@ -1,4 +1,3 @@
-using package.stormiumteam.networking.runtime.highlevel;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using Unity.Transforms;
@@ -7,7 +6,6 @@ namespace Stormium.Core
 {
     public static class STUpdateOrder
     {
-	    [UpdateAfter(typeof(UpdateLoop.IntEnd))]
 	    public class UO_EventManager : ComponentSystemGroup
 	    {
 	    }
