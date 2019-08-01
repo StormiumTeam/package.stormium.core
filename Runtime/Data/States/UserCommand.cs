@@ -103,7 +103,10 @@ namespace Stormium.Core
         [RequireComponentTag(typeof(GamePlayerReadyTag), typeof(UserCommand))]
         private struct JobSetGamePlayerUserCommand : IJobForEachWithEntity<GamePlayer, GamePlayerUserCommand>
         {
-            public BufferFromEntity<UserCommand>             userCommandFromEntity;
+            [ReadOnly]
+            public BufferFromEntity<UserCommand> userCommandFromEntity;
+
+            [NativeDisableContainerSafetyRestriction]
             public BufferFromEntity<GamePlayerActionCommand> gamePlayerActionCommandFromEntity;
 
             public uint targetTick;
@@ -242,7 +245,7 @@ namespace Stormium.Core
                 inputFromEntity = GetBufferFromEntity<UserCommand>(),
                 inputTargetTick = networkTimeSystem.predictTargetTick,
                 userCommand     = m_ActualCommand
-            }.Schedule(this, inputDeps);
+            }.ScheduleSingle(this, inputDeps);
 
             return inputDeps;
         }
@@ -262,7 +265,7 @@ namespace Stormium.Core
 
             for (var ac = 0; ac != UserCommand.MaxActionCount; ac++)
             {
-                var action = inputMap.GetAction("ActionSlot" + ac);
+                var action = inputMap.GetAction("Action" + ac);
                 AddActionEvents(m_Actions[ac] = action);
             }
         }
