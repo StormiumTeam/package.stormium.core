@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using package.stormiumteam.shared;
+using Revolution.NetCode;
 using StormiumTeam.GameBase;
 using StormiumTeam.GameBase.Systems;
 using Unity.Collections;
@@ -8,7 +9,6 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using Unity.NetCode;
 using Unity.Networking.Transport;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,6 +17,26 @@ namespace Stormium.Core
 {
     public struct UserCommand : ICommandData<UserCommand>
     {
+        public struct ActionMask
+        {
+            private byte m_InternalByte;
+
+            public bool IsActive
+            {
+                get => MainBit.GetBitAt(m_InternalByte, 0) == 1;
+                set => MainBit.SetBitAt(ref m_InternalByte, 0, value);
+            }
+
+            public bool FrameUpdate
+            {
+                get => MainBit.GetBitAt(m_InternalByte, 1) == 1;
+                set => MainBit.SetBitAt(ref m_InternalByte, 1, value);
+            }
+
+            public bool WasPressed  => IsActive && FrameUpdate;
+            public bool WasReleased => !IsActive && FrameUpdate;
+        }
+
         public const int MaxActionCount = 4;
 
         public uint Tick { get; set; }
@@ -27,10 +47,20 @@ namespace Stormium.Core
         public bool Jump;
         public bool Dodge;
 
+        public bool Reload;
+
         [NativeDisableUnsafePtrRestriction]
         public unsafe fixed byte Action[MaxActionCount];
 
-        public unsafe void Serialize(DataStreamWriter writer)
+        public unsafe ref ActionMask GetAction(int action)
+        {
+            if (action >= MaxActionCount)
+                throw new IndexOutOfRangeException();
+
+            return ref *(ActionMask*) Action[action];
+        }
+
+        public unsafe void WriteTo(DataStreamWriter writer)
         {
             writer.Write(Move.x);
             writer.Write(Move.y);
@@ -41,6 +71,7 @@ namespace Stormium.Core
             var maskPos = 0;
             MainBit.SetBitAt(ref mask, maskPos++, Jump);
             MainBit.SetBitAt(ref mask, maskPos++, Dodge);
+            MainBit.SetBitAt(ref mask, maskPos++, Reload);
 
             writer.Write(mask);
 
@@ -50,7 +81,7 @@ namespace Stormium.Core
             }
         }
 
-        public unsafe void Deserialize(uint tick, DataStreamReader reader, ref DataStreamReader.Context ctx)
+        public unsafe void ReadFrom(DataStreamReader reader, ref DataStreamReader.Context ctx)
         {
             Move.x = reader.ReadFloat(ref ctx);
             Move.y = reader.ReadFloat(ref ctx);
@@ -59,8 +90,9 @@ namespace Stormium.Core
 
             var mask    = reader.ReadByte(ref ctx);
             var maskPos = 0;
-            Jump  = MainBit.GetBitAt(mask, maskPos++) == 1; // jump
-            Dodge = MainBit.GetBitAt(mask, maskPos++) == 1;
+            Jump   = MainBit.GetBitAt(mask, maskPos++) == 1; // jump
+            Dodge  = MainBit.GetBitAt(mask, maskPos++) == 1;
+            Reload = MainBit.GetBitAt(mask, maskPos++) == 1;
 
             for (var ac = 0; ac != MaxActionCount; ac++)
             {
@@ -78,6 +110,9 @@ namespace Stormium.Core
         public bool IsJumping;
         public bool QueueDodge;
         public bool IsDodging;
+
+        public bool QueueReload;
+        public bool IsReloading;
     }
 
     [InternalBufferCapacity(UserCommand.MaxActionCount)]
@@ -87,17 +122,9 @@ namespace Stormium.Core
         
         public bool IsActive => MainBit.GetBitAt(Data, 0) == 1;
     }
-
-    public class BasicUserCommandSendSystem : CommandSendSystem<UserCommand>
-    {
-    }
-
-    public class BasicUserCommandReceiveSystem : CommandReceiveSystem<UserCommand>
-    {
-    }
     
     [UpdateInGroup(typeof(ServerSimulationSystemGroup))]
-    [UpdateAfter(typeof(BasicUserCommandReceiveSystem))]
+    [UpdateAfter(typeof(CommandSendSystem))]
     public class BasicUserCommandUpdateServer : JobGameBaseSystem
     {
         [RequireComponentTag(typeof(GamePlayerReadyTag), typeof(UserCommand))]
@@ -113,19 +140,27 @@ namespace Stormium.Core
 
             public unsafe void Execute(Entity entity, int index, ref GamePlayer gp, ref GamePlayerUserCommand gamePlayerCommand)
             {
-                if (!userCommandFromEntity[entity].GetDataAtTick(targetTick, out var userCommand))
-                {
-                    gamePlayerCommand.QueueJump  = false;
-                    gamePlayerCommand.IsJumping  = false;
-                    gamePlayerCommand.QueueDodge = false;
-                    gamePlayerCommand.IsDodging  = false;
-                    return;
-                }
+                gamePlayerCommand.QueueJump   = false;
+                gamePlayerCommand.QueueDodge  = false;
+                gamePlayerCommand.QueueReload = false;
 
-                gamePlayerCommand.Look      = userCommand.Look;
-                gamePlayerCommand.Move      = userCommand.Move;
-                gamePlayerCommand.IsJumping = userCommand.Jump;
-                gamePlayerCommand.IsDodging = userCommand.Dodge;
+                if (!userCommandFromEntity[entity].GetDataAtTick(targetTick, out var userCommand))
+                    return;
+
+                if (!gamePlayerCommand.IsJumping && userCommand.Jump)
+                    gamePlayerCommand.QueueJump = true;
+
+                if (!gamePlayerCommand.IsDodging && userCommand.Dodge)
+                    gamePlayerCommand.QueueDodge = true;
+
+                if (!gamePlayerCommand.IsReloading && userCommand.Reload)
+                    gamePlayerCommand.QueueReload = true;
+
+                gamePlayerCommand.Look        = userCommand.Look;
+                gamePlayerCommand.Move        = userCommand.Move;
+                gamePlayerCommand.IsJumping   = userCommand.Jump;
+                gamePlayerCommand.IsDodging   = userCommand.Dodge;
+                gamePlayerCommand.IsReloading = userCommand.Reload;
 
                 var actionCommand = gamePlayerActionCommandFromEntity[entity];
                 actionCommand.Clear();
@@ -166,19 +201,13 @@ namespace Stormium.Core
         private UserCommand m_ActualCommand;
 
         [ExcludeComponent(typeof(NetworkStreamDisconnected))]
-        private struct JobAddCommand : IJobForEachWithEntity<CommandTargetComponent>
+        private struct JobAddCommand : IJobForEachWithEntity_EBC<UserCommand, CommandTargetComponent>
         {
-            public BufferFromEntity<UserCommand> inputFromEntity;
-            public uint                          inputTargetTick;
-
             public UserCommand userCommand;
 
-            public void Execute(Entity entity, int index, [ReadOnly] ref CommandTargetComponent state)
+            public void Execute(Entity entity, int index, DynamicBuffer<UserCommand> inputs, [ReadOnly] ref CommandTargetComponent state)
             {
-                if (!inputFromEntity.Exists(state.targetEntity))
-                    return;
-
-                inputFromEntity[state.targetEntity].AddCommandData(userCommand);
+                inputs.Add(userCommand);
             }
         }
 
@@ -207,25 +236,15 @@ namespace Stormium.Core
 
         protected override JobHandle OnUpdate(JobHandle inputDeps)
         {
-            if (InputEvents.Count < 0)
-                return inputDeps;
-
+            var networkTimeSystem = World.GetExistingSystem<NetworkTimeSystem>();
             foreach (var ev in InputEvents)
             {
                 if (ev.action == m_MoveAction)
-                {
                     m_ActualCommand.Move = ev.ReadValue<Vector2>();
-                }
-
                 if (ev.action == m_JumpAction)
-                {
                     m_ActualCommand.Jump = ev.ReadValue<float>() > 0.5f;
-                }
-
                 if (ev.action == m_DodgeAction)
-                {
                     m_ActualCommand.Dodge = ev.ReadValue<float>() > 0.5f;
-                }
 
                 for (var ac = 0; ac != UserCommand.MaxActionCount; ac++)
                 {
@@ -238,34 +257,30 @@ namespace Stormium.Core
             }
 
             m_ActualCommand.Look = GetNewAimLook(m_ActualCommand.Look, new float2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")));
+            m_ActualCommand.Tick = networkTimeSystem.predictTargetTick;
 
-            var networkTimeSystem = World.GetExistingSystem<NetworkTimeSystem>();
             inputDeps = new JobAddCommand
             {
-                inputFromEntity = GetBufferFromEntity<UserCommand>(),
-                inputTargetTick = networkTimeSystem.predictTargetTick,
-                userCommand     = m_ActualCommand
+                userCommand = m_ActualCommand
             }.ScheduleSingle(this, inputDeps);
 
             return inputDeps;
         }
 
-        private double m_lastJumpTime, m_lastDodgeTime;
-
         private void Refresh()
         {
-            var inputMap = m_Asset.TryGetActionMap("Map");
+            var inputMap = m_Asset.FindActionMap("Map");
             if (inputMap == null)
                 throw new Exception("InputActionMap 'Map' not found.");
 
-            AddActionEvents(m_MoveAction  = inputMap.TryGetAction("Move"));
-            AddActionEvents(m_LookAction  = inputMap.TryGetAction("Look"));
-            AddActionEvents(m_JumpAction  = inputMap.TryGetAction("Jump"));
-            AddActionEvents(m_DodgeAction = inputMap.TryGetAction("Dodge"));
+            AddActionEvents(m_MoveAction  = inputMap.FindAction("Move"));
+            AddActionEvents(m_LookAction  = inputMap.FindAction("Look"));
+            AddActionEvents(m_JumpAction  = inputMap.FindAction("Jump"));
+            AddActionEvents(m_DodgeAction = inputMap.FindAction("Dodge"));
 
             for (var ac = 0; ac != UserCommand.MaxActionCount; ac++)
             {
-                var action = inputMap.GetAction("Action" + ac);
+                var action = inputMap.FindAction("Action" + ac);
                 AddActionEvents(m_Actions[ac] = action);
             }
         }

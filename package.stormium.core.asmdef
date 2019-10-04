@@ -4,6 +4,8 @@
         "package.guerro.shared",
         "package.stormiumteam.gamebase",
         "package.stormiumteam.networking",
+        "Revolution.Snapshot",
+        "Revolution.NetCode",
         "Unity.NetCode",
         "Unity.Networking.Transport",
         "Unity.InputSystem",

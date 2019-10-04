@@ -1,5 +1,3 @@
-using System;
-using package.StormiumTeam.GameBase;
 using StormiumTeam.GameBase;
 using Unity.Entities;
 using UnityEngine;
