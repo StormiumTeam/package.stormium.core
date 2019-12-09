@@ -132,6 +132,8 @@ namespace Stormium.Core
 
         public bool QueueReload;
         public bool IsReloading;
+        
+        public uint Tick { get; set; }
     }
 
     [InternalBufferCapacity(UserCommand.MaxActionCount)]
@@ -204,12 +206,13 @@ namespace Stormium.Core
                 gamePlayerCommand.QueueDodge  = false;
                 gamePlayerCommand.QueueCrouch = false;
                 gamePlayerCommand.QueueReload = false;
+                gamePlayerCommand.Tick        = 0;
 
                 if (!userCommandFromEntity[entity].GetDataAtTick(targetTick, out var userCommand))
                 {
                     return;
                 }
-                
+
                 if (!gamePlayerCommand.IsJumping && userCommand.Jump)
                     gamePlayerCommand.QueueJump = true;
 
@@ -222,6 +225,7 @@ namespace Stormium.Core
                 if (!gamePlayerCommand.IsReloading && userCommand.Reload)
                     gamePlayerCommand.QueueReload = true;
 
+                gamePlayerCommand.Tick        = userCommand.Tick;
                 gamePlayerCommand.Scroll      = 0;
                 gamePlayerCommand.Look        = userCommand.Look;
                 gamePlayerCommand.Move        = userCommand.Move;
